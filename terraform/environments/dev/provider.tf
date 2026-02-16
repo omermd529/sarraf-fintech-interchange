@@ -6,6 +6,6 @@ terraform {
 }
 
 provider "google" {
-  project     = "omerops-sarraf-dev"
-  region      = "me-central1" #Deployed in Doha region due to restrictions in Saudi Arabia Dammam region
+  project = "omerops-sarraf-dev"
+  region  = "me-central1" #Deployed in Doha region due to restrictions in Saudi Arabia Dammam region
 }
