@@ -6,6 +6,6 @@ terraform {
 }
 
 provider "google" {
-  project     = "omerops-sarraf-prod"
-  region      = "me-central1"
+  project = "omerops-sarraf-prod"
+  region  = "me-central1"
 }
