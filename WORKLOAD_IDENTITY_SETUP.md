@@ -28,13 +28,21 @@ terraform output prod_service_account
 
 ## 2. Add GitHub Secrets
 
+### Repository Secrets (for Dev)
 Go to: https://github.com/omermd529/sarraf-fintech-interchange/settings/secrets/actions
 
-Add these 4 secrets:
+Add these 2 secrets:
 - `GCP_WORKLOAD_IDENTITY_PROVIDER` (from dev output)
 - `GCP_SERVICE_ACCOUNT` (from dev output)
-- `GCP_WORKLOAD_IDENTITY_PROVIDER_PROD` (from prod output)
-- `GCP_SERVICE_ACCOUNT_PROD` (from prod output)
+
+### Environment Secrets (for Prod)
+1. Create environment: https://github.com/omermd529/sarraf-fintech-interchange/settings/environments
+   - Name: `production`
+   - Add required reviewers for manual approval
+
+2. Add these 2 secrets to the `production` environment:
+   - `GCP_WORKLOAD_IDENTITY_PROVIDER_PROD` (from prod output)
+   - `GCP_SERVICE_ACCOUNT_PROD` (from prod output)
 
 ## 3. Validation Commands
 
