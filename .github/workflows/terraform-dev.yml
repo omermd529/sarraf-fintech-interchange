@@ -1,0 +1,63 @@
+name: Terraform Dev
+
+on:
+  push:
+    branches: [development]
+    paths:
+      - 'terraform/environments/dev/**'
+      - 'terraform/modules/**'
+  pull_request:
+    branches: [development]
+    paths:
+      - 'terraform/environments/dev/**'
+      - 'terraform/modules/**'
+
+env:
+  TF_VERSION: '1.13.3'
+  WORKING_DIR: terraform/environments/dev
+
+jobs:
+  terraform:
+    name: Terraform Plan & Apply
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform init
+
+      - name: Terraform Format
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform fmt -check
+
+      - name: Terraform Validate
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform validate
+
+      - name: Terraform Plan
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform plan -no-color
+        continue-on-error: true
+
+      - name: Terraform Apply
+        if: github.event_name == 'push'
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform apply -auto-approve
