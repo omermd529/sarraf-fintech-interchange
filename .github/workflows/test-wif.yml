@@ -1,0 +1,48 @@
+name: Test Workload Identity
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test-dev:
+    name: Test Dev WIF
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Test GCP Access
+        run: |
+          gcloud auth list
+          gcloud config list
+          gcloud projects describe omerops-sarraf-dev
+          echo "✅ Dev Workload Identity working!"
+
+  test-prod:
+    name: Test Prod WIF
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_PROD }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_PROD }}
+
+      - name: Test GCP Access
+        run: |
+          gcloud auth list
+          gcloud config list
+          gcloud projects describe omerops-sarraf-prod
+          echo "✅ Prod Workload Identity working!"
