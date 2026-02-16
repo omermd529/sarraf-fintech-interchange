@@ -133,4 +133,4 @@ This automatically:
 1. Requests OIDC token from GitHub
 2. Exchanges it with GCP Workload Identity
 3. Gets short-lived access token
-4. Configures gcloud CLI
+4. Configures gcloud CLI.
