@@ -1,0 +1,8 @@
+# Copy this file to terraform.tfvars and fill in your values
+project_id = "your-prod-project-id"
+region     = "me-central1"
+zone       = "me-central1-a"
+vpc_name    = "sarraf-prod-vpc"
+subnet_cidr = "10.1.0.0/24"
+cluster_name = "sarraf-prod-gke"
+node_count   = 3

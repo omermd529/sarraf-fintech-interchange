@@ -1,0 +1,8 @@
+# Copy this file to terraform.tfvars and fill in your values
+project_id = "your-dev-project-id"
+region     = "me-central1"
+zone       = "me-central1-a"
+vpc_name    = "sarraf-dev-vpc"
+subnet_cidr = "10.0.0.0/24"
+cluster_name = "sarraf-dev-gke"
+node_count   = 2
