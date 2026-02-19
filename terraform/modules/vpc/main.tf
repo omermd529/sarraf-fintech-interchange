@@ -2,6 +2,8 @@ resource "google_compute_network" "vpc" {
   name                    = "sarraf-vpc-${var.env}"
   auto_create_subnetworks = false
   project                 = var.project_id
+
+  depends_on = [google_project_service.apis]
 }
 
 resource "google_compute_subnetwork" "subnet" {
