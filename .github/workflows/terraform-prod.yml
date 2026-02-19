@@ -1,7 +1,7 @@
 name: Terraform Prod
 
 on:
-  pull_request:
+  push:
     branches: [production]
     paths:
       - 'terraform/environments/prod/**'
