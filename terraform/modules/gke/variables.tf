@@ -19,3 +19,7 @@ variable "is_spot" {
   description = "If true, the cluster will prefer Spot instances for cost savings"
   default     = false
 }
+
+variable "project_id" {
+  type = string
+}

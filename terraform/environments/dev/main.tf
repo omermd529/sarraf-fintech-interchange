@@ -13,6 +13,13 @@ module "gke" {
   network_id = module.vpc.vpc_id
   subnet_id  = module.vpc.subnet_id
   is_spot    = true
+  project_id = var.project_id
+}
+
+module "registry" {
+  source              = "../../modules/registry"
+  region              = "me-central1"
+  gke_service_account = module.gke.service_account_email
 }
 
 output "vpc_id" {
