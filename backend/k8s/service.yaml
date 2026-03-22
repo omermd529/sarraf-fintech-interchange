@@ -4,11 +4,14 @@ metadata:
   name: sarraf-backend-service
   labels:
     app: sarraf-backend
+  annotations:
+    # Use Premium network tier for lower latency in the Gulf region
+    cloud.google.com/network-tier: Premium
 spec:
   selector:
     app: sarraf-backend
   ports:
     - protocol: TCP
-      port: 80.  # The port the Load Balancer listens on
-      targetPort: 8080 # The port your Go app is listening on
-  type: LoadBalancer # This tells Google to give you a Public IP
+      port: 80           # External port (Load Balancer)
+      targetPort: 8080   # Internal port (Your FastAPI/Go app)
+  type: LoadBalancer

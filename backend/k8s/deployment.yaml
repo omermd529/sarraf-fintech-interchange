@@ -3,7 +3,7 @@ kind: Deployment
 metadata:
   name: sarraf-backend
   labels:
-  app: sarraf-backend
+    app: sarraf-backend # FIX: Indented 'app' under 'labels'
 spec:
   replicas: 1
   selector:
@@ -14,28 +14,28 @@ spec:
       labels:
         app: sarraf-backend
     spec:
-     serviceAccountName: sarraf-backend-ksa
-    # FINOPS: Use Spot instances in Dev
-    nodeSelector:
-      cloud.google.com/gke-spot: "true"
+      serviceAccountName: sarraf-backend-ksa # FIX: Corrected to 6-space indentation
+      # FINOPS: Use Spot instances in Dev
+      nodeSelector:                          # FIX: Indented under 'spec'
+        cloud.google.com/gke-spot: "true"
 
-      containers:
+      containers:                            # FIX: Indented under 'spec'
       - name: sarraf-api
-      # The pipeline will replace 'IMAGE_PLACEHOLDER' with the actual SHA tag
-      image: IMAGE_PLACEHOLDER
-      ports:
-      - containerPort: 8080
-      env:
-      - name: GCP_REGION
-        value: "me-central1"
-      resources:
-        requests:
-          memory: "512Mi"
-          cpu: "250m"
-        limits:
-          memory: "1Gi"
-          cpu: "500m"
-      livenessProbe:
-        httpGet:
-          path: /health
-          port: 8080
+        # The pipeline will replace 'IMAGE_PLACEHOLDER' with the actual SHA tag
+        image: IMAGE_PLACEHOLDER
+        ports:
+        - containerPort: 8080
+        env:
+        - name: GCP_REGION
+          value: "me-central1"
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
