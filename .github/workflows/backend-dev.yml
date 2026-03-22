@@ -1,0 +1,65 @@
+name: Backend Dev Deploy
+
+on:
+    push:
+        branches: [development]
+        paths:
+            - 'backend/**' # Only triggers if files in the backend folder change
+
+env:
+    PROJECT_ID: omerops-sarraf-dev # GCP project ID for the development environment
+    REGION: me-central1 # GCP region for the development environment
+    REPO_NAME: sarraf-docker-repo
+    IMAGE_NAME: sarraf-api
+    CLUSTER_NAME: sarraf-cluster-dev
+
+jobs:
+    build-and-deploy:
+        name: Build and Deploy to GKE
+        runs-on: ubuntu-latest
+        permissions:
+            contents: read
+            id-token: write
+
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+            # 1. Authenticate to GCP using your existing WIF setup
+            - name: Authenticate to Google Cloud
+              id: auth
+              uses: google-github-actions/auth@v2
+              with:
+                  workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+                  service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+            # 2. Setup GCloud & Docker Auth
+            - name: Setup Cloud SDK
+              uses: google-github-actions/setup-gcloud@v2
+              
+            - name: Configure Docker for artifact registry
+              run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+                # 3. Build and Push the Go Container Image to Artifact Registry
+            - name: Build and Push Docker Image
+              run: |
+                  DOCKER_TAG="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
+                  docker build -t $DOCKER_TAG ./backend
+                  docker push $DOCKER_TAG
+                  # Also tag as 'latest' for convenience
+                  docker tag $DOCKER_TAG ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.IMAGE_NAME }}:latest
+                  docker push ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.IMAGE_NAME }}:latest
+
+            # 4. Get GKE Credentials to talk to the cluster
+
+            - name: Get GKE Credentials
+              uses: google-github-actions/get-gke-credentials@v2
+              with:
+                  cluster_name: ${{ env.CLUSTER_NAME }}
+                  location: ${{ env.REGION }}
+            # 5. Deploy to GKE using kubectl
+            - name: Deploy to GKE
+              run: |
+                # Dynamically update the image in the manifest using the unique SHA
+                IMAGE_FULL_PATH="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
+                sed -i "s|IMAGE_PLACEHOLDER|$IMAGE_FULL_PATH|g" backend/k8s/deployment.yaml
+                kubectl apply -f backend/k8s/
+                # Verify the rollout
+                kubectl rollout status  deployment/sarraf-backend --timeout=120s
