@@ -72,4 +72,4 @@ jobs:
                 kubectl apply -f backend/k8s/
                 
                 # Verify the rollout
-                kubectl rollout status deployment/sarraf-backend --timeout=120s
+                kubectl rollout status deployment/sarraf-backend --timeout=300s

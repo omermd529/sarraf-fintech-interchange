@@ -14,6 +14,7 @@ spec:
       labels:
         app: sarraf-backend
     spec:
+      terminationGracePeriodSeconds: 25 # Matches GKE Spot limit
       serviceAccountName: sarraf-backend-ksa
       nodeSelector:
         cloud.google.com/gke-spot: "true"
