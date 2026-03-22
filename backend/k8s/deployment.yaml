@@ -1,41 +1,75 @@
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: sarraf-backend
-  labels:
-    app: sarraf-backend # FIX: Indented 'app' under 'labels'
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: sarraf-backend
-  template:
-    metadata:
-      labels:
-        app: sarraf-backend
-    spec:
-      serviceAccountName: sarraf-backend-ksa # FIX: Corrected to 6-space indentation
-      # FINOPS: Use Spot instances in Dev
-      nodeSelector:                          # FIX: Indented under 'spec'
-        cloud.google.com/gke-spot: "true"
+name: Backend Dev Deploy
 
-      containers:                            # FIX: Indented under 'spec'
-      - name: sarraf-api
-        # The pipeline will replace 'IMAGE_PLACEHOLDER' with the actual SHA tag
-        image: IMAGE_PLACEHOLDER
-        ports:
-        - containerPort: 8080
-        env:
-        - name: GCP_REGION
-          value: "me-central1"
-        resources:
-          requests:
-            memory: "512Mi"
-            cpu: "250m"
-          limits:
-            memory: "1Gi"
-            cpu: "500m"
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 8080
+on:
+    push:
+        branches: [development]
+        paths:
+            - 'backend/**'
+
+env:
+    PROJECT_ID: omerops-sarraf-dev
+    REGION: me-central1
+    REPO_NAME: sarraf-docker-repo
+    IMAGE_NAME: sarraf-api
+    CLUSTER_NAME: sarraf-cluster-dev
+
+jobs:
+    build-and-deploy:
+        name: Build and Deploy to GKE
+        runs-on: ubuntu-latest
+        permissions:
+            contents: read
+            id-token: write
+
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Authenticate to Google Cloud
+              id: auth
+              uses: google-github-actions/auth@v2
+              with:
+                  workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+                  service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+            - name: Setup Cloud SDK
+              uses: google-github-actions/setup-gcloud@v2
+              
+            - name: Configure Docker for artifact registry
+              run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+            # 3. Build and Push using ONLY the unique Git SHA
+            - name: Build and Push Docker Image
+              run: |
+                  # Define the unique tag using the Commit SHA
+                  UNIQUE_TAG="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
+                  
+                  echo "Building image: $UNIQUE_TAG"
+                  docker build -t $UNIQUE_TAG ./backend
+                  
+                  echo "Pushing unique image to Artifact Registry..."
+                  docker push $UNIQUE_TAG
+                  
+                  # Removed 'latest' tag push to comply with Tag Immutability
+
+            - name: Get GKE Credentials
+              uses: google-github-actions/get-gke-credentials@v2
+              with:
+                  cluster_name: ${{ env.CLUSTER_NAME }}
+                  location: ${{ env.REGION }}
+
+            # 5. Deploy to GKE by injecting the SHA-based image path
+            - name: Deploy to GKE
+              run: |
+                # The image path MUST match the one pushed in step 3
+                IMAGE_FULL_PATH="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
+                
+                # Replace the placeholder in the manifest
+                sed -i "s|IMAGE_PLACEHOLDER|$IMAGE_FULL_PATH|g" backend/k8s/deployment.yaml
+                
+                # Apply the specific deployment first, then the rest of the folder
+                kubectl apply -f backend/k8s/deployment.yaml
+                kubectl apply -f backend/k8s/
+                
+                # Verify the rollout
+                kubectl rollout status deployment/sarraf-backend --timeout=120s

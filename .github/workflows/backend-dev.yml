@@ -4,11 +4,11 @@ on:
     push:
         branches: [development]
         paths:
-            - 'backend/**' # Only triggers if files in the backend folder change
+            - 'backend/**'
 
 env:
-    PROJECT_ID: omerops-sarraf-dev # GCP project ID for the development environment
-    REGION: me-central1 # GCP region for the development environment
+    PROJECT_ID: omerops-sarraf-dev
+    REGION: me-central1
     REPO_NAME: sarraf-docker-repo
     IMAGE_NAME: sarraf-api
     CLUSTER_NAME: sarraf-cluster-dev
@@ -24,42 +24,52 @@ jobs:
         steps:
             - name: Checkout
               uses: actions/checkout@v4
-            # 1. Authenticate to GCP using your existing WIF setup
+
             - name: Authenticate to Google Cloud
               id: auth
               uses: google-github-actions/auth@v2
               with:
                   workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
                   service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
-            # 2. Setup GCloud & Docker Auth
+
             - name: Setup Cloud SDK
               uses: google-github-actions/setup-gcloud@v2
               
             - name: Configure Docker for artifact registry
               run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
-                # 3. Build and Push the Go Container Image to Artifact Registry
+
+            # 3. Build and Push using ONLY the unique Git SHA
             - name: Build and Push Docker Image
               run: |
-                  DOCKER_TAG="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
-                  docker build -t $DOCKER_TAG ./backend
-                  docker push $DOCKER_TAG
-                  # Also tag as 'latest' for convenience
-                  docker tag $DOCKER_TAG ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.IMAGE_NAME }}:latest
-                  docker push ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.IMAGE_NAME }}:latest
-
-            # 4. Get GKE Credentials to talk to the cluster
+                  # Define the unique tag using the Commit SHA
+                  UNIQUE_TAG="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
+                  
+                  echo "Building image: $UNIQUE_TAG"
+                  docker build -t $UNIQUE_TAG ./backend
+                  
+                  echo "Pushing unique image to Artifact Registry..."
+                  docker push $UNIQUE_TAG
+                  
+                  # Removed 'latest' tag push to comply with Tag Immutability
 
             - name: Get GKE Credentials
               uses: google-github-actions/get-gke-credentials@v2
               with:
                   cluster_name: ${{ env.CLUSTER_NAME }}
                   location: ${{ env.REGION }}
-            # 5. Deploy to GKE using kubectl
+
+            # 5. Deploy to GKE by injecting the SHA-based image path
             - name: Deploy to GKE
               run: |
-                # Dynamically update the image in the manifest using the unique SHA
+                # The image path MUST match the one pushed in step 3
                 IMAGE_FULL_PATH="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
+                
+                # Replace the placeholder in the manifest
                 sed -i "s|IMAGE_PLACEHOLDER|$IMAGE_FULL_PATH|g" backend/k8s/deployment.yaml
+                
+                # Apply the specific deployment first, then the rest of the folder
+                kubectl apply -f backend/k8s/deployment.yaml
                 kubectl apply -f backend/k8s/
+                
                 # Verify the rollout
-                kubectl rollout status  deployment/sarraf-backend --timeout=120s
+                kubectl rollout status deployment/sarraf-backend --timeout=120s
