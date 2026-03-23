@@ -19,6 +19,7 @@ module "gke" {
 module "registry" {
   source              = "../../modules/registry"
   region              = "me-central1"
+  project_id          = var.project_id
   gke_service_account = module.gke.service_account_email
 }
 
