@@ -17,3 +17,8 @@ output "pool_name" {
   description = "Workload Identity Pool name"
   value       = google_iam_workload_identity_pool.github_pool.name
 }
+
+# 4. Output the GSA email so you can use it in your K8s manifests
+output "backend_gsa_email" {
+  value = google_service_account.backend_app_gsa.email
+}

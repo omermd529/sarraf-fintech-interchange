@@ -1,3 +1,7 @@
+data "google_project" "project" {
+  project_id = var.project_id
+}
+
 resource "google_container_cluster" "primary" {
   name     = "sarraf-cluster-${var.env}"
   location = var.region
