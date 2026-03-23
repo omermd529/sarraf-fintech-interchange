@@ -6,11 +6,13 @@ on:
     paths:
       - 'terraform/environments/dev/**'
       - 'terraform/modules/**'
+      - '!backend/**' # <--- ADD THIS: Explicitly ignore anything in the backend folder
   pull_request:
     branches: [development]
     paths:
       - 'terraform/environments/dev/**'
       - 'terraform/modules/**'
+      - '!backend/**' # <--- ADD THIS TOO: Ignore backend changes in PRs as well
 
 env:
   TF_VERSION: '1.13.3'

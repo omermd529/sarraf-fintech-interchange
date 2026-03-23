@@ -15,7 +15,7 @@ env:
 
 jobs:
     build-and-deploy:
-        name: Build and Deploy to GKE
+        name: Build, Scan, and Deploy to GKE
         runs-on: ubuntu-latest
         permissions:
             contents: read
@@ -38,19 +38,32 @@ jobs:
             - name: Configure Docker for artifact registry
               run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
 
-            # 3. Build and Push using ONLY the unique Git SHA
-            - name: Build and Push Docker Image
+            # 1. Build the image locally first (so Trivy can scan it)
+            - name: Build Local Docker Image
               run: |
-                  # Define the unique tag using the Commit SHA
-                  UNIQUE_TAG="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
+                  docker build -t sarraf-api:${{ github.sha }} ./backend
+
+            # 2. THE SECURITY GATE: Scan for Vulnerabilities
+            - name: Run Trivy vulnerability scanner
+              uses: aquasecurity/trivy-action@master
+              with:
+                  image-ref: 'sarraf-api:${{ github.sha }}'
+                  format: 'table'
+                  exit-code: '1' # This forces the pipeline to FAIL if issues are found
+                  ignore-unfixed: true # Focus only on bugs that have a patch available
+                  vuln-type: 'os,library'
+                  severity: 'CRITICAL,HIGH'
+
+            # 3. Push ONLY if the scan above passed (Exit Code 0)
+            - name: Push Docker Image to Registry
+              run: |
+                  REMOTE_TAG="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
                   
-                  echo "Building image: $UNIQUE_TAG"
-                  docker build -t $UNIQUE_TAG ./backend
+                  # Tag the local scanned image for the remote registry
+                  docker tag sarraf-api:${{ github.sha }} $REMOTE_TAG
                   
-                  echo "Pushing unique image to Artifact Registry..."
-                  docker push $UNIQUE_TAG
-                  
-                  # Removed 'latest' tag push to comply with Tag Immutability
+                  echo "Pushing verified image: $REMOTE_TAG"
+                  docker push $REMOTE_TAG
 
             - name: Get GKE Credentials
               uses: google-github-actions/get-gke-credentials@v2
@@ -58,18 +71,13 @@ jobs:
                   cluster_name: ${{ env.CLUSTER_NAME }}
                   location: ${{ env.REGION }}
 
-            # 5. Deploy to GKE by injecting the SHA-based image path
+            # 5. Deploy to GKE
             - name: Deploy to GKE
               run: |
-                # The image path MUST match the one pushed in step 3
                 IMAGE_FULL_PATH="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
                 
-                # Replace the placeholder in the manifest
                 sed -i "s|IMAGE_PLACEHOLDER|$IMAGE_FULL_PATH|g" backend/k8s/deployment.yaml
                 
-                # Apply the specific deployment first, then the rest of the folder
-                kubectl apply -f backend/k8s/deployment.yaml
                 kubectl apply -f backend/k8s/
                 
-                # Verify the rollout
                 kubectl rollout status deployment/sarraf-backend --timeout=300s

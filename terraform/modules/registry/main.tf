@@ -23,3 +23,17 @@ resource "google_artifact_registry_repository_iam_member" "gke_reader" {
   role       = "roles/artifactregistry.reader"
   member     = "serviceAccount:${var.gke_service_account}"
 }
+
+resource "google_project_service" "container_scanning" {
+  project = var.project_id
+  service = "containerscanning.googleapis.com"
+
+  disable_on_destroy = false
+}
+
+resource "google_project_service" "artifact_registry" {
+  project = var.project_id
+  service = "artifactregistry.googleapis.com"
+
+  disable_on_destroy = false
+}
