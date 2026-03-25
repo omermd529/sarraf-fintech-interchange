@@ -5,7 +5,7 @@ module "vpc" {
   project_id  = var.project_id
   subnet_cidr = var.subnet_cidr
 }
-
+# GKE needs to be created before the registry because the registry's service account is used in the registry module. The database can be created in parallel since it doesn't have dependencies on the GKE cluster or registry.
 module "gke" {
   source     = "../../modules/gke"
   env        = "dev"
