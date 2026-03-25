@@ -29,7 +29,6 @@ module "database" {
   region      = var.region
   env         = "dev"
   vpc_id      = module.vpc.vpc_id
-  db_password = var.db_password # Pass this from your tfvars (sensitive)
 }
 
 output "vpc_id" {
