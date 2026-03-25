@@ -61,7 +61,7 @@ resource "google_service_account" "backend_app_gsa" {
 resource "google_service_account_iam_member" "gke_workload_identity_binding" {
   service_account_id = google_service_account.backend_app_gsa.name
   role               = "roles/iam.workloadIdentityUser"
-  
+
   # Format: serviceAccount:[PROJECT_ID].svc.id.goog[[NAMESPACE]/[KSA_NAME]]
   member = "serviceAccount:${var.project_id}.svc.id.goog[default/sarraf-backend-ksa]"
 }

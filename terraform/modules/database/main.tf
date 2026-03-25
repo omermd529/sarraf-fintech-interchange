@@ -24,7 +24,7 @@ resource "google_sql_database_instance" "sarraf_db_instance" {
       ipv4_enabled    = false
       private_network = var.vpc_id
     }
-    
+
     backup_configuration {
       enabled    = true
       start_time = "02:00" # Backups during low traffic
@@ -46,7 +46,7 @@ data "google_secret_manager_secret" "db_password_meta" {
 
 # 2. Fetch the actual Secret Value (the payload)
 data "google_secret_manager_secret_version" "db_password_value" {
-  secret = data.google_secret_manager_secret.db_password_meta.id
+  secret  = data.google_secret_manager_secret.db_password_meta.id
   version = "latest" # Always pulls the most recent version you created
 }
 
@@ -54,7 +54,7 @@ data "google_secret_manager_secret_version" "db_password_value" {
 resource "google_sql_user" "users" {
   name     = "sarraf_admin"
   instance = google_sql_database_instance.sarraf_db_instance.name
-  
+
   # Fetching directly from the data source secret_data
   password = data.google_secret_manager_secret_version.db_password_value.secret_data
 }
