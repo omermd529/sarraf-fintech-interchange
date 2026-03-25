@@ -72,3 +72,9 @@ resource "google_project_iam_member" "backend_app_log_writer" {
   role    = "roles/logging.logWriter"
   member  = "serviceAccount:${google_service_account.backend_app_gsa.email}"
 }
+
+resource "google_project_iam_member" "github_actions_networking" {
+  project = var.project_id
+  role    = "roles/servicenetworking.networksAdmin"
+  member  = "serviceAccount:${google_service_account.github_actions.email}"
+}
