@@ -115,4 +115,5 @@ This project is engineered to meet the stringent requirements of the **Saudi Ara
 ## 📞 Contact
 
 **Omer Mohammed** - Cloud & Platform Engineer
+- Email:omermd529@gmail.com
 *Project Status: Active Development (Phase: Data Layer Integration)*
