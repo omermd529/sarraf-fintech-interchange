@@ -73,6 +73,13 @@ resource "google_project_iam_member" "backend_app_log_writer" {
   member  = "serviceAccount:${google_service_account.backend_app_gsa.email}"
 }
 
+# 4. Allow the Backend App GSA to access the DB password secret only (Least Privilege)
+resource "google_secret_manager_secret_iam_member" "backend_db_password" {
+  secret_id = "sarraf-db-password"
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.backend_app_gsa.email}"
+}
+
 resource "google_project_iam_member" "github_actions_networking" {
   project = var.project_id
   role    = "roles/servicenetworking.networksAdmin"

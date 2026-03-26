@@ -20,6 +20,11 @@ func main() {
 	}
 	dbUser := os.Getenv("DB_USER")
 	dbPass := os.Getenv("DB_PASSWORD")
+	if passFile := os.Getenv("DB_PASSWORD_FILE"); passFile != "" {
+		if b, err := os.ReadFile(passFile); err == nil {
+			dbPass = string(b)
+		}
+	}
 	dbName := os.Getenv("DB_NAME")
 
 	// 2. Build Connection String (DSN)

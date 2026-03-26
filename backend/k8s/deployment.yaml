@@ -36,12 +36,8 @@ spec:
           value: "sarraf_admin"
         - name: DB_PORT
           value: "5432"
-        - name: DB_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              # Must match the 'secretName' defined in your SecretProviderClass 'secretObjects'
-              name: sarraf-db-password-sync
-              key: password
+        - name: DB_PASSWORD_FILE
+          value: "/var/secrets/dbpassword.txt"
 
         resources:
           requests:
