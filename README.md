@@ -19,6 +19,28 @@ The project is built on a **Zero-Trust** infrastructure model:
 - **Security:** Keyless authentication via **Workload Identity Federation (OIDC)**.
 
 ---
+## 🛠️ Technical Challenges & Solutions
+
+### 1. Zero-Trust Identity with Workload Identity Federation (WIF)
+**Challenge:** Initially, the CI/CD pipeline required long-lived Service Account JSON keys stored as GitHub Secrets, posing a significant security risk and management overhead.
+**Solution:** Implemented **GCP Workload Identity Federation**. This allows GitHub Actions to authenticate to GCP using short-lived, identity-based tokens. I configured the OIDC provider and restricted permissions to a specific repository and branch, adhering to the **Principle of Least Privilege**.
+
+### 2. Private Service Access & VPC Peering
+**Challenge:** To maintain a high security posture, the Cloud SQL (PostgreSQL) instance was configured with **Private IP only**. However, this created a connectivity gap between the VPC and the Google-managed services network.
+**Solution:** I engineered a **Private Service Access** connection using `google_service_networking_connection`. This involved:
+* Allocating a specific internal IP range for peering.
+* Configuring VPC Peering to allow the GKE cluster to communicate with the database over the Google internal backbone, ensuring no database traffic ever touches the public internet.
+
+
+### 3. Automated IAM Lifecycle Management
+**Challenge:** During the initial Terraform apply, the Service Account lacked the authority to modify project-level IAM policies, leading to "403 Forbidden" errors when attempting to automate networking roles.
+**Solution:** I transitioned the infrastructure from "Manual Click-Ops" to **Full IaC Autonomy**. By granting the CI/CD Service Account `roles/resourcemanager.projectIamAdmin`, I enabled Terraform to manage its own required roles (like `networksAdmin`). This ensures the entire environment is 100% reproducible from code without manual intervention.
+
+### 4. Distributed State Recovery (Ghost Locking)
+**Challenge:** Pipeline interruptions or manual cancellations occasionally left "Zombie Locks" on the Terraform state stored in GCS, preventing subsequent deployments.
+**Solution:** Implemented robust CI/CD practices by:
+* Adding `-input=false` to all Terraform commands to prevent interactive hangs.
+* Documenting a standard operating procedure for using `terraform force-unlock` to recover the state without risking corruption.
 
 ## 🛡️ Regulatory Compliance & Security Standards
 
