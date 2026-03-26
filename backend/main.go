@@ -83,3 +83,5 @@ func main() {
 		log.Fatal(err)
 	}
 }
+
+// This is a simple Go backend for the Sarraf Fintech Interchange project.
