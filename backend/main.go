@@ -59,7 +59,7 @@ func main() {
 		log.Fatalf("Could not connect to DB after retries: %v", err)
 	}
 
-	// 5. Define HTTP Routes
+	// 5. Define HTTP Routes.
 	http.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		err := dbPool.Ping(r.Context())
 		if err != nil {
