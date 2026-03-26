@@ -1,5 +1,5 @@
 # Stage 1: Build the application
-FROM golang:1.22-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 # Install git and ca-certificates (often needed for fetching private modules or SSL)
 RUN apk add --no-cache git ca-certificates && update-ca-certificates
