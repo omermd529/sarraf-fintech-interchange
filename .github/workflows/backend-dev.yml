@@ -34,15 +34,14 @@ jobs:
 
             - name: Setup Cloud SDK
               uses: google-github-actions/setup-gcloud@v2
-              
-            - name: Configure Docker for artifact registry
-              run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
 
-            # --- ADDED: Install Terraform CLI ---
             - name: Setup Terraform
               uses: hashicorp/setup-terraform@v3
               with:
-                terraform_wrapper: false # Ensures clean output for 'sed'
+                terraform_wrapper: false
+
+            - name: Configure Docker for artifact registry
+              run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
 
             - name: Build Local Docker Image
               run: |
@@ -58,18 +57,25 @@ jobs:
                   vuln-type: 'os,library'
                   severity: 'CRITICAL,HIGH'
 
-            - name: Push Docker Image to Registry
+            # --- SMART PUSH: Skips if tag exists to avoid Immutability Error ---
+            - name: Check and Push Docker Image
               run: |
                   REMOTE_TAG="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
-                  docker tag sarraf-api:${{ github.sha }} $REMOTE_TAG
-                  docker push $REMOTE_TAG
+                  
+                  # Use gcloud to check if the specific tag already exists in the registry
+                  if gcloud artifacts docker images describe "$REMOTE_TAG" > /dev/null 2>&1; then
+                    echo "Tag ${{ github.sha }} already exists. Skipping push to respect Immutability."
+                  else
+                    echo "Tag not found. Pushing new image..."
+                    docker tag sarraf-api:${{ github.sha }} "$REMOTE_TAG"
+                    docker push "$REMOTE_TAG"
+                  fi
 
-            # --- UPDATED: Proper Init to fetch Remote State ---
             - name: Fetch DB IP from Terraform
               id: fetch_db_ip
               run: |
                 cd terraform/environments/dev
-                terraform init # Removed -backend=false to ensure it can reach your state bucket
+                terraform init
                 DB_IP=$(terraform output -raw database_ip)
                 echo "DB_IP=$DB_IP" >> $GITHUB_OUTPUT
 
@@ -84,7 +90,7 @@ jobs:
                 IMAGE_FULL_PATH="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
                 DB_PRIVATE_IP="${{ steps.fetch_db_ip.outputs.DB_IP }}"
                 
-                # Use | as a delimiter in sed because the image path contains /
+                # Injection
                 sed -i "s|IMAGE_PLACEHOLDER|$IMAGE_FULL_PATH|g" backend/k8s/deployment.yaml
                 sed -i "s|DATABASE_IP_PLACEHOLDER|$DB_PRIVATE_IP|g" backend/k8s/deployment.yaml
                 
