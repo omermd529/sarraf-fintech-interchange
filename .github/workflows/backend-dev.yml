@@ -38,12 +38,16 @@ jobs:
             - name: Configure Docker for artifact registry
               run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
 
-            # 1. Build using your new multi-stage Dockerfile
+            # --- ADDED: Install Terraform CLI ---
+            - name: Setup Terraform
+              uses: hashicorp/setup-terraform@v3
+              with:
+                terraform_wrapper: false # Ensures clean output for 'sed'
+
             - name: Build Local Docker Image
               run: |
                   docker build -t sarraf-api:${{ github.sha }} ./backend
 
-            # 2. THE SECURITY GATE
             - name: Run Trivy vulnerability scanner
               uses: aquasecurity/trivy-action@master
               with:
@@ -54,19 +58,18 @@ jobs:
                   vuln-type: 'os,library'
                   severity: 'CRITICAL,HIGH'
 
-            # 3. Push verified image
             - name: Push Docker Image to Registry
               run: |
                   REMOTE_TAG="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
                   docker tag sarraf-api:${{ github.sha }} $REMOTE_TAG
                   docker push $REMOTE_TAG
 
-            # 4. FETCH DATABASE IP (New Step for Enterprise Automation)
+            # --- UPDATED: Proper Init to fetch Remote State ---
             - name: Fetch DB IP from Terraform
               id: fetch_db_ip
               run: |
                 cd terraform/environments/dev
-                terraform init -backend=false # No need to download providers again
+                terraform init # Removed -backend=false to ensure it can reach your state bucket
                 DB_IP=$(terraform output -raw database_ip)
                 echo "DB_IP=$DB_IP" >> $GITHUB_OUTPUT
 
@@ -76,13 +79,12 @@ jobs:
                   cluster_name: ${{ env.CLUSTER_NAME }}
                   location: ${{ env.REGION }}
 
-            # 5. Deploy with dynamic Injection
             - name: Deploy to GKE
               run: |
                 IMAGE_FULL_PATH="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
                 DB_PRIVATE_IP="${{ steps.fetch_db_ip.outputs.DB_IP }}"
                 
-                # Replace both Image and DB Host placeholders
+                # Use | as a delimiter in sed because the image path contains /
                 sed -i "s|IMAGE_PLACEHOLDER|$IMAGE_FULL_PATH|g" backend/k8s/deployment.yaml
                 sed -i "s|DATABASE_IP_PLACEHOLDER|$DB_PRIVATE_IP|g" backend/k8s/deployment.yaml
                 
