@@ -77,11 +77,34 @@ This project is engineered to meet the stringent requirements of the **Saudi Ara
 
 ```bash
 .
-├── backend/            # Golang Microservices & K8s Manifests
-├── terraform/          # Infrastructure as Code
-│   ├── modules/        # Reusable VPC, GKE, IAM modules
-│   └── environments/   # Environment-specific (Dev/Prod) configs
-└── .github/            # DevSecOps CI/CD Pipelines
+├── .github/
+│   └── workflows/              # DevSecOps CI/CD Pipelines
+│       ├── backend-dev.yml
+│       ├── terraform-dev.yml
+│       ├── terraform-prod.yml
+│       └── test-wif.yml
+├── backend/
+│   ├── k8s/                    # Kubernetes Manifests
+│   │   ├── deployment.yaml
+│   │   ├── service.yaml
+│   │   └── serviceaccount.yaml
+│   ├── Dockerfile              # Multi-stage Distroless Build
+│   ├── go.mod
+│   └── main.go                 # Golang Microservice
+├── terraform/
+│   ├── environments/           # Environment-specific Configs
+│   │   ├── dev/
+│   │   └── prod/
+│   └── modules/                # Reusable Terraform Modules
+│       ├── database/           # Cloud SQL (Private IP)
+│       ├── gke/                # GKE Autopilot Cluster
+│       ├── iam/                # IAM Roles & Bindings
+│       ├── registry/           # Artifact Registry
+│       ├── vpc/                # VPC, Subnets, Cloud NAT
+│       └── workload-identity/  # WIF (OIDC) Config
+├── setup-github-wif.sh         # WIF Bootstrap Script
+├── WORKLOAD_IDENTITY_SETUP.md  # WIF Setup Guide
+└── README.md
 ```
 
 ### Deployment
@@ -117,4 +140,7 @@ This project is engineered to meet the stringent requirements of the **Saudi Ara
 **Omer Mohammed** - Cloud & Platform Engineer
 - Email:omermd529@gmail.com
 - LinkedIn: [linkedin.com/in/omermd529](https://www.linkedin.com/in/omermd529)
-*Project Status: Active Development (Phase: Data Layer Integration)*
+
+---
+
+*Project Status: Active Development (Phase: Backend Containerization & CI/CD Pipeline Integration)*
