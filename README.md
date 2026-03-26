@@ -116,4 +116,5 @@ This project is engineered to meet the stringent requirements of the **Saudi Ara
 
 **Omer Mohammed** - Cloud & Platform Engineer
 - Email:omermd529@gmail.com
+- LinkedIn: [linkedin.com/in/omermd529](https://www.linkedin.com/in/omermd529)
 *Project Status: Active Development (Phase: Data Layer Integration)*
