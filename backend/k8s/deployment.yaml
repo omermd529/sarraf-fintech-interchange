@@ -6,6 +6,11 @@ metadata:
     app: sarraf-backend
 spec:
   replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 0
   selector:
     matchLabels:
       app: sarraf-backend
@@ -21,9 +26,8 @@ spec:
         cloud.google.com/gke-spot: "true"
       containers:
       - name: sarraf-api
-        image: me-central1-docker.pkg.dev/omerops-sarraf-dev/sarraf-docker-repo/sarraf-api:latest 
-        # Crucial for 'latest' tags to ensure the node pulls the new build from Artifact Registry
-        imagePullPolicy: Always 
+        image: IMAGE_PLACEHOLDER
+        imagePullPolicy: Always
         ports:
         - containerPort: 8080
         

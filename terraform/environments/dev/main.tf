@@ -34,3 +34,7 @@ module "database" {
 output "vpc_id" {
   value = module.vpc.vpc_id
 }
+
+output "database_ip" {
+  value = module.database.db_private_ip
+}
