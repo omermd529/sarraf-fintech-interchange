@@ -5,6 +5,6 @@ output "database_ip" {
 
 # Optional: Add these for debugging
 output "database_instance_name" {
-  value = module.database.db_instance_name
+  value       = module.database.db_instance_name
   description = "The name of the SQL instance for the backend"
 }
