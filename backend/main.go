@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -22,7 +24,7 @@ func main() {
 	dbPass := os.Getenv("DB_PASSWORD")
 	if passFile := os.Getenv("DB_PASSWORD_FILE"); passFile != "" {
 		if b, err := os.ReadFile(passFile); err == nil {
-			dbPass = string(b)
+			dbPass = strings.TrimSpace(string(b))
 		}
 	}
 	dbName := os.Getenv("DB_NAME")
@@ -31,7 +33,7 @@ func main() {
 	// sslmode=disable is used here because we are on a Private VPC.
 	// In a full Prod move, we'd use Cloud SQL Auth Proxy for TLS.
 	dsn := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable",
-		dbUser, dbPass, dbHost, dbPort, dbName)
+		url.QueryEscape(dbUser), url.QueryEscape(dbPass), dbHost, dbPort, dbName)
 
 	// 3. Create a Connection Pool
 	config, err := pgxpool.ParseConfig(dsn)
