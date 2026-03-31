@@ -48,7 +48,7 @@ This project is engineered to meet the stringent requirements of the **Saudi Ara
 
 ### 1. Data Sovereignty (SAMA/NDMO)
 
-- **Regional Residency:** All compute, storage, and networking resources are strictly pinned to the **`me-central1` (Doha)** region to ensure low latency and compliance with regional data residency guidelines.
+- **Regional Residency:** All compute, storage, and networking resources are strictly pinned to the **`me-central1` (Doha)** region. The preferred `me-central2` (Dammam, KSA) region is not available for India-based GCP accounts, so Doha was chosen as the nearest Gulf alternative to ensure low latency and compliance with regional data residency guidelines.
 - **Private Connectivity:** No GKE nodes or Database instances have Public IPs. All internal traffic stays within the Google Global Fiber Network.
 
 ### 2. Secure SDLC (NCA-CSCC)
@@ -128,7 +128,7 @@ This project is engineered to meet the stringent requirements of the **Saudi Ara
 | :--- | :--- |
 | **Runtime** | Golang (1.22) |
 | **Cloud** | Google Cloud Platform (GCP) |
-| **Compute** | GKE Autopilot (Spot Instances) |
+| **Compute** | GKE Autopilot (Spot Instances for Dev, Standard for Prod) |
 | **IaC** | Terraform |
 | **Security** | Trivy, WIF, Distroless, Cloud IAM |
 | **CI/CD** | GitHub Actions |
