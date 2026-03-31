@@ -1,4 +1,4 @@
-# 🔧 Troubleshooting Log: Sarraf Backend Deployment
+# 📘 Engineering Learnings: Sarraf Backend Deployment
 
 ## Issue 1: Database Connection String Parsing Failure
 
