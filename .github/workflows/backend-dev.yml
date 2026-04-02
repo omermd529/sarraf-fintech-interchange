@@ -97,6 +97,10 @@ jobs:
                 sed -i "s|NAMESPACE_PLACEHOLDER|$NAMESPACE|g" backend/k8s/deployment.yaml
                 sed -i "s|NAMESPACE_PLACEHOLDER|$NAMESPACE|g" backend/k8s/service.yaml
                 sed -i "s|NAMESPACE_PLACEHOLDER|$NAMESPACE|g" backend/k8s/secret-provider.yaml
+                sed -i "s|NAMESPACE_PLACEHOLDER|$NAMESPACE|g" backend/k8s/namespace.yaml
+                sed -i "s|NAMESPACE_PLACEHOLDER|$NAMESPACE|g" backend/k8s/serviceaccount.yaml
                 
+                # Create namespace first, then apply all resources
+                kubectl apply -f backend/k8s/namespace.yaml
                 kubectl apply -f backend/k8s/
                 kubectl rollout status deployment/sarraf-backend -n $NAMESPACE --timeout=300s

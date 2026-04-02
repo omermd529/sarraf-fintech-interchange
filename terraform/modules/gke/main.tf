@@ -35,10 +35,17 @@ resource "google_container_cluster" "primary" {
 
   # This allows the GKE Control Plane to be reached via IAP
   master_authorized_networks_config {
-    gcp_public_cidrs_access_enabled = false 
+    gcp_public_cidrs_access_enabled = false
     cidr_blocks {
-      cidr_block   = "35.235.240.0/20" # This is the Google IAP Proxy range
+      cidr_block   = "35.235.240.0/20" # Google IAP Proxy range
       display_name = "IAP-Proxy"
+    }
+    dynamic "cidr_blocks" {
+      for_each = var.allow_cicd_access ? [1] : []
+      content {
+        cidr_block   = "0.0.0.0/0"
+        display_name = "CI-CD-Runners"
+      }
     }
   }
 
@@ -54,24 +61,4 @@ resource "google_container_cluster" "primary" {
 
   # Prevents accidental deletion of the cluster during 'terraform destroy'
   deletion_protection = false 
-}
-
-# --- Kubernetes Resources (Namespace & KSA) ---
-
-resource "kubernetes_namespace" "sarraf" {
-  metadata {
-    name = "sarraf-${var.env}"
-  }
-
-  depends_on = [google_container_cluster.primary]
-}
-
-resource "kubernetes_service_account" "backend_ksa" {
-  metadata {
-    name      = "sarraf-backend-ksa"
-    namespace = kubernetes_namespace.sarraf.metadata[0].name
-    annotations = {
-      "iam.gke.io/gcp-service-account" = var.backend_gsa_email
-    }
-  }
 }

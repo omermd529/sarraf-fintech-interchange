@@ -24,7 +24,8 @@ variable "project_id" {
   type = string
 }
 
-variable "backend_gsa_email" {
-  description = "Backend Google Service Account email for Workload Identity annotation"
-  type        = string
+variable "allow_cicd_access" {
+  description = "Allow CI/CD runners (0.0.0.0/0) to reach the GKE control plane. Use true for dev only."
+  type        = bool
+  default     = false
 }

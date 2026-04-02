@@ -14,7 +14,7 @@ module "gke" {
   subnet_id         = module.vpc.subnet_id
   is_spot           = true
   project_id        = var.project_id
-  backend_gsa_email = module.workload_identity.backend_gsa_email
+  allow_cicd_access = true
 }
 
 module "registry" {
