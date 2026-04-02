@@ -23,3 +23,8 @@ variable "is_spot" {
 variable "project_id" {
   type = string
 }
+
+variable "backend_gsa_email" {
+  description = "Backend Google Service Account email for Workload Identity annotation"
+  type        = string
+}

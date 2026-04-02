@@ -63,7 +63,7 @@ resource "google_service_account_iam_member" "gke_workload_identity_binding" {
   role               = "roles/iam.workloadIdentityUser"
 
   # Format: serviceAccount:[PROJECT_ID].svc.id.goog[[NAMESPACE]/[KSA_NAME]]
-  member = "serviceAccount:${var.project_id}.svc.id.goog[default/sarraf-backend-ksa]"
+  member = "serviceAccount:${var.project_id}.svc.id.goog[${var.k8s_namespace}/sarraf-backend-ksa]"
 }
 
 # 3. Give the Backend App GSA permissions (e.g., to write logs)

@@ -25,3 +25,9 @@ resource "google_service_account_iam_member" "workload_identity_binding" {
   role               = "roles/iam.workloadIdentityUser"
   member             = "serviceAccount:${var.project_id}.svc.id.goog[default/sarraf-backend-ksa]"
 }
+
+resource "google_project_iam_member" "iap_tunnel_user" {
+  project = var.project_id
+  role    = "roles/iap.tunnelResourceAccessor"
+  member  = "user:omerops13@gmail.com"
+}

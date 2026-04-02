@@ -7,13 +7,14 @@ module "vpc" {
 }
 # GKE needs to be created before the registry because the registry's service account is used in the registry module. The database can be created in parallel since it doesn't have dependencies on the GKE cluster or registry.
 module "gke" {
-  source     = "../../modules/gke"
-  env        = "dev"
-  region     = "me-central1"
-  network_id = module.vpc.vpc_id
-  subnet_id  = module.vpc.subnet_id
-  is_spot    = true
-  project_id = var.project_id
+  source            = "../../modules/gke"
+  env               = "dev"
+  region            = "me-central1"
+  network_id        = module.vpc.vpc_id
+  subnet_id         = module.vpc.subnet_id
+  is_spot           = true
+  project_id        = var.project_id
+  backend_gsa_email = module.workload_identity.backend_gsa_email
 }
 
 module "registry" {

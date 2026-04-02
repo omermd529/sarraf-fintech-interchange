@@ -1,10 +1,11 @@
 module "workload_identity" {
   source = "../../modules/workload-identity"
 
-  project_id  = "omerops-sarraf-prod"
-  github_org  = "omermd529"
-  github_repo = "sarraf-fintech-interchange"
-  environment = "prod"
+  project_id    = "omerops-sarraf-prod"
+  github_org    = "omermd529"
+  github_repo   = "sarraf-fintech-interchange"
+  environment   = "prod"
+  k8s_namespace = "sarraf-prod"
 
   service_account_roles = [
     "roles/editor",

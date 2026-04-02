@@ -23,3 +23,9 @@ variable "service_account_roles" {
   type        = list(string)
   default     = ["roles/editor"]
 }
+
+variable "k8s_namespace" {
+  description = "Kubernetes namespace for the backend KSA (used in Workload Identity binding)"
+  type        = string
+  default     = "default"
+}

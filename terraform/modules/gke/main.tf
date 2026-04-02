@@ -6,7 +6,7 @@ resource "google_container_cluster" "primary" {
   name     = "sarraf-cluster-${var.env}"
   location = var.region
 
-  # Autopilot is the right choice for Doha (me-central1) efficiency
+  
   enable_autopilot = true
 
   # Fixes the "Error 400" by explicitly maintaining this state
@@ -14,7 +14,7 @@ resource "google_container_cluster" "primary" {
     enabled = true
   }
 
-  # REQUIRED: This links your K8s Service Accounts to Google IAM
+  # REQUIRED: This links the K8s Service Accounts to Google IAM
   workload_identity_config {
     workload_pool = "${data.google_project.project.project_id}.svc.id.goog"
   }
@@ -33,12 +33,19 @@ resource "google_container_cluster" "primary" {
     services_secondary_range_name = "k8s-service-range"
   }
 
-  # Temporary allow-all for debugging; remember to tighten this later!
+  # This allows the GKE Control Plane to be reached via IAP
   master_authorized_networks_config {
+    gcp_public_cidrs_access_enabled = false 
     cidr_blocks {
-      cidr_block   = "0.0.0.0/0"
-      display_name = "Allow-All-Temporary"
+      cidr_block   = "35.235.240.0/20" # This is the Google IAP Proxy range
+      display_name = "IAP-Proxy"
     }
+  }
+
+  private_cluster_config {
+    enable_private_nodes    = true
+    enable_private_endpoint = false # Keep false to allow IAP tunnel to public endpoint
+    master_ipv4_cidr_block  = "172.16.0.0/28"
   }
 
   release_channel {
@@ -47,4 +54,24 @@ resource "google_container_cluster" "primary" {
 
   # Prevents accidental deletion of the cluster during 'terraform destroy'
   deletion_protection = false 
+}
+
+# --- Kubernetes Resources (Namespace & KSA) ---
+
+resource "kubernetes_namespace" "sarraf" {
+  metadata {
+    name = "sarraf-${var.env}"
+  }
+
+  depends_on = [google_container_cluster.primary]
+}
+
+resource "kubernetes_service_account" "backend_ksa" {
+  metadata {
+    name      = "sarraf-backend-ksa"
+    namespace = kubernetes_namespace.sarraf.metadata[0].name
+    annotations = {
+      "iam.gke.io/gcp-service-account" = var.backend_gsa_email
+    }
+  }
 }

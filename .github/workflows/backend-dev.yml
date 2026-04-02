@@ -89,10 +89,14 @@ jobs:
               run: |
                 IMAGE_FULL_PATH="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
                 DB_PRIVATE_IP="${{ steps.fetch_db_ip.outputs.DB_IP }}"
+                NAMESPACE="sarraf-dev"
                 
                 # Injection
                 sed -i "s|IMAGE_PLACEHOLDER|$IMAGE_FULL_PATH|g" backend/k8s/deployment.yaml
                 sed -i "s|DATABASE_IP_PLACEHOLDER|$DB_PRIVATE_IP|g" backend/k8s/deployment.yaml
+                sed -i "s|NAMESPACE_PLACEHOLDER|$NAMESPACE|g" backend/k8s/deployment.yaml
+                sed -i "s|NAMESPACE_PLACEHOLDER|$NAMESPACE|g" backend/k8s/service.yaml
+                sed -i "s|NAMESPACE_PLACEHOLDER|$NAMESPACE|g" backend/k8s/secret-provider.yaml
                 
                 kubectl apply -f backend/k8s/
-                kubectl rollout status deployment/sarraf-backend --timeout=300s
+                kubectl rollout status deployment/sarraf-backend -n $NAMESPACE --timeout=300s
