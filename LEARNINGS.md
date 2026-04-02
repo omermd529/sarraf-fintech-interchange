@@ -125,24 +125,71 @@ sarraf-db-password-sync   Opaque   1      50s
 | `backend/k8s/secret-provider.yaml` | Confirmed `objectName: dbpassword.txt` |
 | `backend/k8s/csi-rbac.yaml` | ClusterRole + ClusterRoleBinding for CSI driver |
 
-## Important: RBAC Must Live in the Repo
+## Important: CSI RBAC Removed (csi-rbac.yaml deleted)
 
-The ClusterRole and ClusterRoleBinding are stored in `backend/k8s/csi-rbac.yaml` and **must be applied from the repo via CI/CD** — not manually via `kubectl`. If the cluster is ever recreated (e.g., `terraform destroy/apply`), any RBAC applied only via `kubectl` would be lost.
+The `csi-rbac.yaml` (ClusterRole + ClusterRoleBinding for the CSI driver) was removed because:
 
-In your `backend-dev.yml` workflow, apply it **before** the deployment:
+1. **GKE Autopilot** manages the Secrets Store CSI driver as a built-in add-on — it forbids creating ClusterRoles/ClusterRoleBindings from the CI/CD service account.
+2. **The app doesn't need it.** The RBAC was only required for the `secretObjects` sync feature (creating a K8s Secret from the GCP secret). Our Go code reads directly from the **CSI volume file mount** (`DB_PASSWORD_FILE=/var/secrets/dbpassword.txt`), not from a K8s Secret.
 
-```yaml
-kubectl apply -f backend/k8s/csi-rbac.yaml
-kubectl apply -f backend/k8s/secret-provider.yaml
-kubectl apply -f backend/k8s/serviceaccount.yaml
-kubectl apply -f backend/k8s/deployment.yaml
-kubectl apply -f backend/k8s/service.yaml
+**Two different CSI features:**
+| Feature | Needs RBAC? | How it works |
+|:---|:---|:---|
+| Volume file mount (`/var/secrets/dbpassword.txt`) | No | CSI driver mounts secret as a file in the pod |
+| K8s Secret sync (`secretObjects`) | Yes | CSI driver creates a K8s Secret object — requires ClusterRole for secrets CRUD |
+
+If the synced K8s Secret (`sarraf-db-password-sync`) is ever needed in the future (e.g., for env var injection), the RBAC would need to be re-added — but on Autopilot this may require a support request or switching to a Standard cluster.
+
+---
+
+## Issue 3: Namespace Isolation & Private Cluster CI/CD Access
+
+**Symptom:**
+```
+dial tcp 34.18.110.48:443: i/o timeout
+```
+Terraform and GitHub Actions `kubectl` commands timed out trying to reach the GKE API.
+
+**Root Cause:**
+- `master_authorized_networks_config` only allowed the IAP range (`35.235.240.0/20`).
+- GitHub Actions runners have dynamic public IPs outside that range.
+- Terraform's `kubernetes` provider also couldn't reach the private cluster from local machines.
+
+**Fix Applied:**
+1. Added `allow_cicd_access` variable to the GKE module — conditionally adds `0.0.0.0/0` to authorized networks for dev only.
+2. Removed the `kubernetes` provider from Terraform — namespace and KSA are now managed via `kubectl` in CI/CD instead.
+3. Created `backend/k8s/namespace.yaml` — namespace `sarraf-dev` / `sarraf-prod` applied via CI/CD.
+4. All K8s manifests use `NAMESPACE_PLACEHOLDER`, injected by `sed` in the pipeline.
+
+**Key Decision:** Terraform manages GCP-side resources (cluster, IAM, WIF). `kubectl` in CI/CD manages K8s-side resources (namespace, KSA, deployments) — because CI/CD has network access to the private cluster via `get-gke-credentials`.
+
+---
+
+## Issue 4: IAM Permission Denied for Workload Identity Binding
+
+**Symptom:**
+```
+Error 403: Permission 'iam.serviceAccounts.setIamPolicy' denied on resource
 ```
 
-This ensures the CSI driver has secrets permissions ready before the pod starts.
+**Root Cause:**
+The CI/CD service account had `roles/editor` which does **not** include `iam.serviceAccounts.setIamPolicy`. This permission is needed for the KSA→GSA Workload Identity binding (`google_service_account_iam_member`).
+
+**Fix Applied:**
+Added `roles/iam.serviceAccountAdmin` to the CI/CD service account roles in both dev and prod `workload-identity.tf`. Bootstrapped manually with:
+```bash
+gcloud projects add-iam-policy-binding omerops-sarraf-dev \
+  --member="serviceAccount:github-actions-dev@omerops-sarraf-dev.iam.gserviceaccount.com" \
+  --role="roles/iam.serviceAccountAdmin"
+```
+
+---
 
 ## Key Lessons
 
 1. **Always URL-encode credentials** when building database connection strings — special characters in passwords will break URL parsing.
-2. **GKE Secrets Store CSI driver** requires explicit RBAC permissions to sync `secretObjects` into Kubernetes Secrets. The volume mount works without it, but the K8s Secret creation does not.
+2. **CSI volume mount vs secretObjects sync** are two different features. Volume mounts work without extra RBAC; K8s Secret sync requires ClusterRole permissions.
 3. **`objectName` in `secretObjects`** must match the `fileName` defined in the SecretProviderClass parameters, not the GCP `resourceName`.
+4. **Private GKE clusters** need authorized network entries for any external client (CI/CD runners, local machines). Use a variable to control access per environment.
+5. **Don't manage K8s resources via Terraform** when the cluster is private and Terraform runs externally — use `kubectl` in CI/CD instead.
+6. **`roles/editor` is not enough** for IAM operations on service accounts. `roles/iam.serviceAccountAdmin` is needed for Workload Identity bindings.

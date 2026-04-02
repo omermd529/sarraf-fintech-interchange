@@ -9,7 +9,8 @@ module "workload_identity" {
 
   service_account_roles = [
     "roles/editor",
-    "roles/storage.admin"
+    "roles/storage.admin",
+    "roles/iam.serviceAccountAdmin"
   ]
 }
 
