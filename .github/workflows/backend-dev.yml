@@ -88,12 +88,14 @@ jobs:
             - name: Run Database Migrations
               run: |
                 NAMESPACE="sarraf-dev"
+                DB_PRIVATE_IP="${{ steps.fetch_db_ip.outputs.DB_IP }}"
                 
                 # Create ConfigMap from the migrations folder
                 kubectl create configmap sarraf-migrations-cm --from-file=backend/migrations/ -n $NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
                 
-                # Inject namespace into migration job manifest
+                # Inject namespace and DB IP into migration job manifest
                 sed -i "s|NAMESPACE_PLACEHOLDER|$NAMESPACE|g" backend/k8s/migration-job.yaml
+                sed -i "s|DATABASE_IP_PLACEHOLDER|$DB_PRIVATE_IP|g" backend/k8s/migration-job.yaml
                 
                 # Delete previous job if it exists (jobs are immutable)
                 kubectl delete job sarraf-db-migrate -n $NAMESPACE --ignore-not-found
@@ -101,8 +103,8 @@ jobs:
                 # Run the Migration Job
                 kubectl apply -f backend/k8s/migration-job.yaml
                 
-                # Wait for the job to complete successfully
-                kubectl wait --for=condition=complete job/sarraf-db-migrate -n $NAMESPACE --timeout=120s
+                # Wait for the job to complete (Autopilot may need time to provision a node)
+                kubectl wait --for=condition=complete job/sarraf-db-migrate -n $NAMESPACE --timeout=300s
 
             - name: Deploy to GKE
               run: |

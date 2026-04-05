@@ -12,7 +12,7 @@ spec:
         image: migrate/migrate:v4.17.0 # Official migration tool
         args:
         - -path=/migrations/
-        - -database=postgres://sarraf_admin:$(DB_PASSWORD)@10.20.0.3:5432/sarraf_interchange?sslmode=require
+        - -database=postgres://sarraf_admin:$(DB_PASSWORD)@DATABASE_IP_PLACEHOLDER:5432/sarraf_interchange?sslmode=require
         - up
         env:
         - name: DB_PASSWORD
