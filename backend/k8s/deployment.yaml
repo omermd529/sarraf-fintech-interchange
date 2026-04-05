@@ -23,8 +23,6 @@ spec:
       terminationGracePeriodSeconds: 25 
       # Links the KSA to your Google Service Account via Workload Identity
       serviceAccountName: sarraf-backend-ksa
-      nodeSelector:
-        cloud.google.com/gke-spot: "true"
       containers:
       - name: sarraf-api
         image: IMAGE_PLACEHOLDER
