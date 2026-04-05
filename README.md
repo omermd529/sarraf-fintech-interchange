@@ -86,10 +86,17 @@ This project is engineered to meet the stringent requirements of the **Saudi Ara
 ├── backend/
 │   ├── k8s/                    # Kubernetes Manifests
 │   │   ├── deployment.yaml
+│   │   ├── migration-job.yaml  # DB Migration K8s Job
+│   │   ├── namespace.yaml
+│   │   ├── secret-provider.yaml
 │   │   ├── service.yaml
 │   │   └── serviceaccount.yaml
+│   ├── migrations/             # SQL Schema Migrations
+│   │   ├── 000001_init_sarraf_schema.up.sql
+│   │   └── 000001_init.down.sql
 │   ├── Dockerfile              # Multi-stage Distroless Build
 │   ├── go.mod
+│   ├── go.sum
 │   └── main.go                 # Golang Microservice
 ├── terraform/
 │   ├── environments/           # Environment-specific Configs
@@ -102,9 +109,12 @@ This project is engineered to meet the stringent requirements of the **Saudi Ara
 │       ├── registry/           # Artifact Registry
 │       ├── vpc/                # VPC, Subnets, Cloud NAT
 │       └── workload-identity/  # WIF (OIDC) Config
+├── .gitignore
+├── LEARNINGS.md                # Technical learnings & notes
+├── LICENSE
+├── README.md
 ├── setup-github-wif.sh         # WIF Bootstrap Script
-├── WORKLOAD_IDENTITY_SETUP.md  # WIF Setup Guide
-└── README.md
+└── WORKLOAD_IDENTITY_SETUP.md  # WIF Setup Guide
 ```
 
 ### Deployment
@@ -118,6 +128,7 @@ This project is engineered to meet the stringent requirements of the **Saudi Ara
    Push your changes to the `development` branch. The GitHub Action will automatically:
    - Build & Scan the Go binary.
    - Push to Artifact Registry.
+   - Run database migrations via a K8s Job.
    - Deploy to GKE via `kubectl`.
 
 ---
@@ -129,6 +140,7 @@ This project is engineered to meet the stringent requirements of the **Saudi Ara
 | **Runtime** | Golang (1.22) |
 | **Cloud** | Google Cloud Platform (GCP) |
 | **Compute** | GKE Autopilot (Spot Instances for Dev, Standard for Prod) |
+| **Database** | Cloud SQL (PostgreSQL) with versioned SQL migrations |
 | **IaC** | Terraform |
 | **Security** | Trivy, WIF, Distroless, Cloud IAM |
 | **CI/CD** | GitHub Actions |

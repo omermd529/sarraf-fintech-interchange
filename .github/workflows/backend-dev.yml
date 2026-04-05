@@ -85,6 +85,25 @@ jobs:
                   cluster_name: ${{ env.CLUSTER_NAME }}
                   location: ${{ env.REGION }}
 
+            - name: Run Database Migrations
+              run: |
+                NAMESPACE="sarraf-dev"
+                
+                # Create ConfigMap from the migrations folder
+                kubectl create configmap sarraf-migrations-cm --from-file=backend/migrations/ -n $NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
+                
+                # Inject namespace into migration job manifest
+                sed -i "s|NAMESPACE_PLACEHOLDER|$NAMESPACE|g" backend/k8s/migration-job.yaml
+                
+                # Delete previous job if it exists (jobs are immutable)
+                kubectl delete job sarraf-db-migrate -n $NAMESPACE --ignore-not-found
+                
+                # Run the Migration Job
+                kubectl apply -f backend/k8s/migration-job.yaml
+                
+                # Wait for the job to complete successfully
+                kubectl wait --for=condition=complete job/sarraf-db-migrate -n $NAMESPACE --timeout=120s
+
             - name: Deploy to GKE
               run: |
                 IMAGE_FULL_PATH="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"

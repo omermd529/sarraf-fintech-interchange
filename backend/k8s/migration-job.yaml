@@ -1,0 +1,31 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: sarraf-db-migrate
+  namespace: sarraf-dev
+spec:
+  template:
+    spec:
+      serviceAccountName: sarraf-backend-ksa
+      containers:
+      - name: migrate
+        image: migrate/migrate:v4.17.0 # Official migration tool
+        args:
+        - -path=/migrations/
+        - -database=postgres://sarraf_admin:$(DB_PASSWORD)@10.20.0.3:5432/sarraf_interchange?sslmode=require
+        - up
+        env:
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: sarraf-db-password-sync
+              key: password
+        volumeMounts:
+        - name: migration-files
+          mountPath: /migrations/
+      restartPolicy: OnFailure
+      volumes:
+      - name: migration-files
+        configMap:
+          name: sarraf-migrations-cm
+  backoffLimit: 4
