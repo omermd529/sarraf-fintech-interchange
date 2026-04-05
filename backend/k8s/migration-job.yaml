@@ -23,9 +23,18 @@ spec:
         volumeMounts:
         - name: migration-files
           mountPath: /migrations/
+        - name: db-secret-volume
+          mountPath: "/var/secrets"
+          readOnly: true
       restartPolicy: OnFailure
       volumes:
       - name: migration-files
         configMap:
           name: sarraf-migrations-cm
+      - name: db-secret-volume
+        csi:
+          driver: secrets-store.csi.k8s.io
+          readOnly: true
+          volumeAttributes:
+            secretProviderClass: "sarraf-db-secrets"
   backoffLimit: 4
