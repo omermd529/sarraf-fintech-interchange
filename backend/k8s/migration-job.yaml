@@ -10,26 +10,22 @@ spec:
       containers:
       - name: migrate
         image: migrate/migrate:v4.17.0
-        command: ["/bin/sh", "-c"]
         args:
-        - |
-          DB_PASSWORD=$(cat /var/secrets/dbpassword.txt)
-          /migrate -path=/migrations/ -database="postgres://sarraf_admin:${DB_PASSWORD}@DATABASE_IP_PLACEHOLDER:5432/sarraf_interchange?sslmode=require" up
+        - -path=/migrations/
+        - -database=postgres://sarraf_admin:$(DB_PASSWORD)@DATABASE_IP_PLACEHOLDER:5432/sarraf_interchange?sslmode=require
+        - up
+        env:
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: sarraf-db-password-sync
+              key: password
         volumeMounts:
         - name: migration-files
           mountPath: /migrations/
-        - name: db-secret-volume
-          mountPath: "/var/secrets"
-          readOnly: true
       restartPolicy: OnFailure
       volumes:
       - name: migration-files
         configMap:
           name: sarraf-migrations-cm
-      - name: db-secret-volume
-        csi:
-          driver: secrets-store-gke.csi.k8s.io
-          readOnly: true
-          volumeAttributes:
-            secretProviderClass: "sarraf-db-secrets"
   backoffLimit: 4

@@ -85,6 +85,14 @@ jobs:
                   cluster_name: ${{ env.CLUSTER_NAME }}
                   location: ${{ env.REGION }}
 
+            - name: Sync DB Secret to Kubernetes
+              run: |
+                NAMESPACE="sarraf-dev"
+                DB_PASS=$(gcloud secrets versions access latest --secret=sarraf-db-password --project=${{ env.PROJECT_ID }})
+                kubectl create secret generic sarraf-db-password-sync \
+                  --from-literal=password="$DB_PASS" \
+                  -n $NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
+
             - name: Run Database Migrations
               run: |
                 NAMESPACE="sarraf-dev"
