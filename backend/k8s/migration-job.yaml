@@ -36,7 +36,10 @@ spec:
         args:
           - |
             DB_PASS=$(cat /tmp/shared/db_pass_encoded.txt)
-            /migrate -path=/migrations/ -database="postgres://sarraf_admin:${DB_PASS}@DATABASE_IP_PLACEHOLDER:5432/sarraf_interchange?sslmode=disable" up
+            DB_URL="postgres://sarraf_admin:${DB_PASS}@DATABASE_IP_PLACEHOLDER:5432/sarraf_interchange?sslmode=disable"
+            # Force-reset dirty state if needed, then run migrations
+            /migrate -path=/migrations/ -database="$DB_URL" force 1
+            /migrate -path=/migrations/ -database="$DB_URL" up
         volumeMounts:
         - name: migration-files
           mountPath: /migrations/

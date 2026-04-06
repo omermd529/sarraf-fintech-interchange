@@ -193,3 +193,142 @@ gcloud projects add-iam-policy-binding omerops-sarraf-dev \
 4. **Private GKE clusters** need authorized network entries for any external client (CI/CD runners, local machines). Use a variable to control access per environment.
 5. **Don't manage K8s resources via Terraform** when the cluster is private and Terraform runs externally — use `kubectl` in CI/CD instead.
 6. **`roles/editor` is not enough** for IAM operations on service accounts. `roles/iam.serviceAccountAdmin` is needed for Workload Identity bindings.
+
+---
+
+## Issue 5: Database Migration Job — The Autopilot Gauntlet
+
+**Goal:** Run `golang-migrate` as a K8s Job to apply SQL schema migrations before deploying the backend.
+
+**What followed was a chain of 7+ failures**, each revealing a new layer of complexity when running short-lived Jobs on GKE Autopilot with secrets from GCP Secret Manager.
+
+### Challenge 5a: GKE Autopilot Cold-Start Timeout
+
+**Symptom:**
+```
+error: timed out waiting for the condition on jobs/sarraf-db-migrate
+```
+
+**Root Cause:** GKE Autopilot scales from zero. When the Job is created, Autopilot must provision a new node, which takes 2-4 minutes. The initial `kubectl wait --timeout=120s` wasn't enough.
+
+**Fix:** Increased timeout to `300s`. But the job still failed — revealing the next issue.
+
+---
+
+### Challenge 5b: CSI Driver Not Found on New Nodes
+
+**Symptom:**
+```
+MountVolume.SetUp failed for volume "db-secret-volume": driver name secrets-store.csi.k8s.io not found
+```
+
+**Root Cause:** The migration job was using `secrets-store.csi.k8s.io` (open-source driver), but GKE Autopilot uses `secrets-store-gke.csi.k8s.io` (GKE-native driver). Additionally, newly provisioned Autopilot nodes take time to register CSI drivers.
+
+**Fix:** Changed driver to `secrets-store-gke.csi.k8s.io` to match the deployment.
+
+---
+
+### Challenge 5c: Chicken-and-Egg — secretKeyRef vs CSI Volume Mount
+
+**Symptom:**
+```
+CreateContainerConfigError — secret "sarraf-db-password-sync" not found
+```
+
+**Root Cause:** The migration job used `secretKeyRef` to read the password from a K8s Secret. But that K8s Secret is only created **after** the CSI volume mounts. The CSI volume only mounts **after** the container starts. The container can't start without the secret → deadlock.
+
+**Fix Attempt 1:** Switched to reading the password from the CSI-mounted file (`/var/secrets/dbpassword.txt`) using a shell wrapper instead of `secretKeyRef`.
+
+**Result:** Container started, but `FailedToCreateSecret: timed out` — the CSI driver couldn't sync fast enough for short-lived Jobs.
+
+---
+
+### Challenge 5d: Pipeline-Based Migration via Cloud SQL Auth Proxy
+
+**Approach:** Bypass K8s entirely — run migrations directly on the GitHub Actions runner using Cloud SQL Auth Proxy.
+
+**Failure 1 — Public IP:** `instance does not have IP of type "PUBLIC"`. The Cloud SQL instance is private-only. Added `--private-ip` flag, but the GitHub runner is on the public internet and can't reach the VPC private IP.
+
+**Failure 2 — Password URL Encoding:** The password `Z4#tV9!rK2@xP8^mL6$wQ3&bH7*eN5` contains `#` (URL fragment delimiter), `@` (host separator), `$` (bash variable), `&` (query separator). These broke both bash expansion and URL parsing.
+
+**Verdict:** Pipeline-based approach abandoned — can't reach private Cloud SQL from external runners without VPN/IAP tunnel.
+
+---
+
+### Challenge 5e: Init Container Pattern (Final Solution)
+
+**Approach:** Use an `initContainer` as a "gatekeeper" that waits for the CSI driver to write the secret file before the migrate container starts.
+
+**Architecture:**
+```
+initContainer (alpine) → waits for /var/secrets/dbpassword.txt
+                        → URL-encodes password with python3
+                        → writes to /tmp/shared/db_pass_encoded.txt (emptyDir)
+                        ↓
+container (migrate)    → reads pre-encoded password from shared volume
+                        → runs migrations with safe connection string
+```
+
+**Why Init Container solves the timing issue:**
+- Init containers run **before** main containers
+- The CSI volume is mounted on the init container, triggering the driver to fetch the secret
+- The `until [ -f ... ]; do sleep 2; done` loop waits for the file to appear
+- Only after the init container exits successfully does the migrate container start
+
+**Why URL-encoding is needed:**
+- The `migrate` tool parses the database URL using Go's `net/url` package
+- Special characters in the password (`#@$&^*!`) must be percent-encoded
+- Alpine's `python3` handles this via `urllib.parse.quote()`
+- The encoded password is shared via an `emptyDir` volume
+
+---
+
+### Challenge 5f: Dirty Database State
+
+**Symptom:**
+```
+error: Dirty database version 1. Fix and force version.
+```
+
+**Root Cause:** A previous migration attempt partially executed (created some tables) but then crashed. `golang-migrate` tracks migration state in a `schema_migrations` table. When a migration fails mid-way, it marks the version as "dirty" to prevent re-running potentially half-applied changes.
+
+**Fix:** Added `force 1` before `up` in the migration command:
+```sh
+/migrate -path=/migrations/ -database="$DB_URL" force 1
+/migrate -path=/migrations/ -database="$DB_URL" up
+```
+
+---
+
+### Challenge 5g: GCE Spot Quota Exceeded
+
+**Symptom:**
+```
+FailedScaleUp: GCE quota exceeded. Pod is at risk of not being scheduled.
+Node-Selectors: cloud.google.com/gke-spot=true
+```
+
+**Root Cause:** The backend deployment had `nodeSelector: cloud.google.com/gke-spot: "true"`, but Spot VM quota in `me-central1` was exhausted.
+
+**Fix:** Removed the Spot node selector from `deployment.yaml` so pods can schedule on standard nodes.
+
+---
+
+### Summary: Migration Job Evolution
+
+| Attempt | Approach | Failure Reason |
+|:---|:---|:---|
+| 1 | K8s Job + `secretKeyRef` | Chicken-and-egg: K8s Secret doesn't exist before CSI mounts |
+| 2 | K8s Job + CSI file read (shell wrapper) | CSI driver sync too slow for short-lived Jobs |
+| 3 | Pipeline + Cloud SQL Auth Proxy | Can't reach private Cloud SQL from public GitHub runners |
+| 4 | K8s Job + Init Container | ✅ Works — init container waits for secret, URL-encodes, passes to migrate |
+
+### Key Lessons
+
+7. **GKE Autopilot cold-starts** add 2-4 minutes to Job scheduling. Always use generous timeouts (300s+).
+8. **CSI driver names differ** between open-source (`secrets-store.csi.k8s.io`) and GKE-native (`secrets-store-gke.csi.k8s.io`). Always check `kubectl get csidrivers`.
+9. **`secretKeyRef` and CSI volume mounts have a circular dependency** for Jobs — use init containers or file-based reads instead.
+10. **Passwords with special characters** (`#@$&^*!`) break both bash expansion and URL parsing. Always URL-encode credentials in connection strings.
+11. **Private Cloud SQL instances** can't be reached from external CI/CD runners without VPN/IAP. Run migrations in-cluster.
+12. **`golang-migrate` dirty state** requires `force <version>` to reset before re-running. Consider adding this to migration scripts for resilience.
+13. **Init containers** are the production pattern for CSI secret dependencies — they guarantee the secret file exists before the main container starts.
