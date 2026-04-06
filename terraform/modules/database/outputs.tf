@@ -12,3 +12,8 @@ output "db_name" {
   value       = google_sql_database.database.name
   description = "The name of the default database"
 }
+
+output "db_connection_name" {
+  value       = google_sql_database_instance.sarraf_db_instance.connection_name
+  description = "The connection name for Cloud SQL Auth Proxy"
+}

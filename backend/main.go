@@ -22,20 +22,35 @@ func main() {
 	}
 	dbUser := os.Getenv("DB_USER")
 	dbPass := os.Getenv("DB_PASSWORD")
-	if passFile := os.Getenv("DB_PASSWORD_FILE"); passFile != "" {
-		b, err := os.ReadFile(passFile)
-		if err != nil {
-			log.Fatalf("SECURITY: Failed to read DB secret from %s: %v", passFile, err)
+
+	// IAM Auth mode: no password needed, Cloud SQL Auth Proxy handles it
+	iamAuth := os.Getenv("DB_IAM_AUTH") == "true"
+
+	if !iamAuth {
+		// Legacy: read password from file for non-IAM environments
+		if passFile := os.Getenv("DB_PASSWORD_FILE"); passFile != "" {
+			b, err := os.ReadFile(passFile)
+			if err != nil {
+				log.Fatalf("SECURITY: Failed to read DB secret from %s: %v", passFile, err)
+			}
+			dbPass = strings.TrimSpace(string(b))
 		}
-		dbPass = strings.TrimSpace(string(b))
 	}
 	dbName := os.Getenv("DB_NAME")
 
 	// 2. Build Connection String (DSN)
-	// sslmode=disable is used here because we are on a Private VPC.
-	// In a full Prod move, we'd use Cloud SQL Auth Proxy for TLS.
-	dsn := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable",
-		url.QueryEscape(dbUser), url.QueryEscape(dbPass), dbHost, dbPort, dbName)
+	var dsn string
+	if iamAuth {
+		// IAM Auth: connect via Cloud SQL Auth Proxy on localhost, no password
+		// Strip .gserviceaccount.com suffix — Cloud SQL IAM requires the short form
+		iamUser := strings.TrimSuffix(dbUser, ".gserviceaccount.com")
+		dsn = fmt.Sprintf("postgres://%s@%s:%s/%s?sslmode=disable",
+			url.QueryEscape(iamUser), dbHost, dbPort, dbName)
+		log.Println("Using IAM Authentication via Cloud SQL Auth Proxy")
+	} else {
+		dsn = fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable",
+			url.QueryEscape(dbUser), url.QueryEscape(dbPass), dbHost, dbPort, dbName)
+	}
 
 	// 3. Create a Connection Pool
 	config, err := pgxpool.ParseConfig(dsn)

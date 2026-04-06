@@ -25,11 +25,17 @@ module "registry" {
 }
 
 module "database" {
-  source     = "../../modules/database"
+  source            = "../../modules/database"
+  project_id        = var.project_id
+  region            = var.region
+  env               = "dev"
+  vpc_id            = module.vpc.vpc_id
+  backend_gsa_email = module.iam.backend_gsa_email
+}
+
+module "iam" {
+  source     = "../../modules/iam"
   project_id = var.project_id
-  region     = var.region
-  env        = "dev"
-  vpc_id     = module.vpc.vpc_id
 }
 
 output "vpc_id" {

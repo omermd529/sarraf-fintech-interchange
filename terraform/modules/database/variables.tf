@@ -17,3 +17,8 @@ variable "vpc_id" {
   description = "The ID of the VPC where the DB will be peered"
   type        = string
 }
+
+variable "backend_gsa_email" {
+  description = "The backend GSA email for IAM DB authentication"
+  type        = string
+}

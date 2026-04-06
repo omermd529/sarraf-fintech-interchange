@@ -10,6 +10,18 @@ resource "google_project_iam_member" "gsa_storage_viewer" {
   member  = "serviceAccount:${google_service_account.sarraf_backend.email}"
 }
 
+resource "google_project_iam_member" "gsa_cloudsql_client" {
+  project = var.project_id
+  role    = "roles/cloudsql.client"
+  member  = "serviceAccount:${google_service_account.sarraf_backend.email}"
+}
+
+resource "google_project_iam_member" "gsa_cloudsql_instance_user" {
+  project = var.project_id
+  role    = "roles/cloudsql.instanceUser"
+  member  = "serviceAccount:${google_service_account.sarraf_backend.email}"
+}
+
 resource "kubernetes_service_account" "backend_ksa" {
   metadata {
     name      = "sarraf-backend-ksa"

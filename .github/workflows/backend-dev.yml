@@ -71,13 +71,14 @@ jobs:
                     docker push "$REMOTE_TAG"
                   fi
 
-            - name: Fetch DB IP from Terraform
-              id: fetch_db_ip
+            - name: Fetch Terraform Outputs
+              id: tf_outputs
               run: |
                 cd terraform/environments/dev
                 terraform init
-                DB_IP=$(terraform output -raw database_ip)
-                echo "DB_IP=$DB_IP" >> $GITHUB_OUTPUT
+                echo "DB_IP=$(terraform output -raw database_ip)" >> $GITHUB_OUTPUT
+                echo "DB_CONN_NAME=$(terraform output -raw database_connection_name)" >> $GITHUB_OUTPUT
+                echo "GSA_EMAIL=$(terraform output -raw backend_gsa_email)" >> $GITHUB_OUTPUT
 
             - name: Get GKE Credentials
               uses: google-github-actions/get-gke-credentials@v2
@@ -96,7 +97,7 @@ jobs:
             - name: Run Database Migrations
               run: |
                 NAMESPACE="sarraf-dev"
-                DB_PRIVATE_IP="${{ steps.fetch_db_ip.outputs.DB_IP }}"
+                DB_PRIVATE_IP="${{ steps.tf_outputs.outputs.DB_IP }}"
                 
                 # Create ConfigMap from the migrations folder
                 kubectl create configmap sarraf-migrations-cm --from-file=backend/migrations/ -n $NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
@@ -117,12 +118,14 @@ jobs:
             - name: Deploy to GKE
               run: |
                 IMAGE_FULL_PATH="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
-                DB_PRIVATE_IP="${{ steps.fetch_db_ip.outputs.DB_IP }}"
+                DB_CONN_NAME="${{ steps.tf_outputs.outputs.DB_CONN_NAME }}"
+                GSA_EMAIL="${{ steps.tf_outputs.outputs.GSA_EMAIL }}"
                 NAMESPACE="sarraf-dev"
                 
                 # Injection
                 sed -i "s|IMAGE_PLACEHOLDER|$IMAGE_FULL_PATH|g" backend/k8s/deployment.yaml
-                sed -i "s|DATABASE_IP_PLACEHOLDER|$DB_PRIVATE_IP|g" backend/k8s/deployment.yaml
+                sed -i "s|DB_CONNECTION_NAME_PLACEHOLDER|$DB_CONN_NAME|g" backend/k8s/deployment.yaml
+                sed -i "s|GSA_EMAIL_PLACEHOLDER|$GSA_EMAIL|g" backend/k8s/deployment.yaml
                 sed -i "s|NAMESPACE_PLACEHOLDER|$NAMESPACE|g" backend/k8s/deployment.yaml
                 sed -i "s|NAMESPACE_PLACEHOLDER|$NAMESPACE|g" backend/k8s/service.yaml
                 sed -i "s|NAMESPACE_PLACEHOLDER|$NAMESPACE|g" backend/k8s/secret-provider.yaml

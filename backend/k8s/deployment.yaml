@@ -20,8 +20,7 @@ spec:
       labels:
         app: sarraf-backend
     spec:
-      terminationGracePeriodSeconds: 25 
-      # Links the KSA to your Google Service Account via Workload Identity
+      terminationGracePeriodSeconds: 25
       serviceAccountName: sarraf-backend-ksa
       containers:
       - name: sarraf-api
@@ -29,18 +28,18 @@ spec:
         imagePullPolicy: Always
         ports:
         - containerPort: 8080
-        
+
         env:
         - name: DB_HOST
-          value: "DATABASE_IP_PLACEHOLDER"
+          value: "localhost"
         - name: DB_NAME
           value: "sarraf_interchange"
         - name: DB_USER
-          value: "sarraf_admin"
+          value: "GSA_EMAIL_PLACEHOLDER"
         - name: DB_PORT
           value: "5432"
-        - name: DB_PASSWORD_FILE
-          value: "/var/secrets/dbpassword.txt"
+        - name: DB_IAM_AUTH
+          value: "true"
 
         resources:
           requests:
@@ -50,14 +49,12 @@ spec:
             memory: "1Gi"
             cpu: "500m"
 
-        # GKE will restart the pod if /healthz stops responding
         livenessProbe:
           httpGet:
             path: /healthz
             port: 8080
           initialDelaySeconds: 15
           periodSeconds: 20
-        # GKE will stop sending traffic if /healthz is failing
         readinessProbe:
           httpGet:
             path: /healthz
@@ -65,18 +62,19 @@ spec:
           initialDelaySeconds: 10
           periodSeconds: 10
 
-        volumeMounts:
-        - name: secrets-store-inline
-          # Standardized path; ensure your Go code looks here for the secret file if needed
-          mountPath: "/var/secrets"
-          readOnly: true
-
-      volumes:
-        - name: secrets-store-inline
-          csi:
-            # GKE Autopilot specific driver name
-            driver: secrets-store-gke.csi.k8s.io
-            readOnly: true
-            volumeAttributes:
-              secretProviderClass: "sarraf-db-secrets"
-              
+      # Cloud SQL Auth Proxy — handles IAM auth + TLS to the DB
+      - name: cloud-sql-proxy
+        image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.15.2
+        args:
+        - "--auto-iam-authn"
+        - "--structured-logs"
+        - "DB_CONNECTION_NAME_PLACEHOLDER"
+        securityContext:
+          runAsNonRoot: true
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"

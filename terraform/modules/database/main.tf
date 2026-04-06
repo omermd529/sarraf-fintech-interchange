@@ -20,6 +20,12 @@ resource "google_sql_database_instance" "sarraf_db_instance" {
 
   settings {
     tier = "db-f1-micro" # Start small for Dev (FinOps!)
+
+    database_flags {
+      name  = "cloudsql.iam_authentication"
+      value = "on"
+    }
+
     ip_configuration {
       ipv4_enabled    = false
       private_network = var.vpc_id
@@ -54,7 +60,12 @@ data "google_secret_manager_secret_version" "db_password_value" {
 resource "google_sql_user" "users" {
   name     = "sarraf_admin"
   instance = google_sql_database_instance.sarraf_db_instance.name
-
-  # Fetching directly from the data source secret_data
   password = data.google_secret_manager_secret_version.db_password_value.secret_data
+}
+
+# IAM DB user — authenticates via GSA token, no password needed
+resource "google_sql_user" "iam_user" {
+  name     = var.backend_gsa_email
+  instance = google_sql_database_instance.sarraf_db_instance.name
+  type     = "CLOUD_IAM_SERVICE_ACCOUNT"
 }
