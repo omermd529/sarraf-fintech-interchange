@@ -5,6 +5,7 @@ on:
         branches: [development]
         paths:
             - 'backend/**'
+            - '.github/workflows/backend-dev.yml'
 
 env:
     PROJECT_ID: omerops-sarraf-dev
@@ -100,8 +101,9 @@ jobs:
                 sleep 3
                 
                 # Fetch DB password and URL-encode special characters
-                DB_PASS=$(gcloud secrets versions access latest --secret=sarraf-db-password --project=${{ env.PROJECT_ID }})
-                DB_PASS_ENCODED=$(python3 -c "import urllib.parse; print(urllib.parse.quote('$DB_PASS', safe=''))")
+                gcloud secrets versions access latest --secret=sarraf-db-password --project=${{ env.PROJECT_ID }} > /tmp/dbpass.txt
+                DB_PASS_ENCODED=$(python3 -c "import urllib.parse; print(urllib.parse.quote(open('/tmp/dbpass.txt').read().strip(), safe=''))")
+                rm -f /tmp/dbpass.txt
                 
                 # Install and run golang-migrate
                 curl -sSL https://github.com/golang-migrate/migrate/releases/download/v4.17.0/migrate.linux-amd64.tar.gz | tar xz
