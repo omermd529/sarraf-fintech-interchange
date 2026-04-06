@@ -22,20 +22,10 @@ resource "google_project_iam_member" "gsa_cloudsql_instance_user" {
   member  = "serviceAccount:${google_service_account.sarraf_backend.email}"
 }
 
-resource "kubernetes_service_account" "backend_ksa" {
-  metadata {
-    name      = "sarraf-backend-ksa"
-    namespace = "default"
-    annotations = {
-      "iam.gke.io/gcp-service-account" = google_service_account.sarraf_backend.email
-    }
-  }
-}
-
 resource "google_service_account_iam_member" "workload_identity_binding" {
   service_account_id = google_service_account.sarraf_backend.name
   role               = "roles/iam.workloadIdentityUser"
-  member             = "serviceAccount:${var.project_id}.svc.id.goog[default/sarraf-backend-ksa]"
+  member             = "serviceAccount:${var.project_id}.svc.id.goog[sarraf-dev/sarraf-backend-ksa]"
 }
 
 resource "google_project_iam_member" "iap_tunnel_user" {

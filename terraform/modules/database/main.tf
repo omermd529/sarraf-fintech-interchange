@@ -64,8 +64,9 @@ resource "google_sql_user" "users" {
 }
 
 # IAM DB user — authenticates via GSA token, no password needed
+# Cloud SQL requires the email WITHOUT the .gserviceaccount.com suffix
 resource "google_sql_user" "iam_user" {
-  name     = var.backend_gsa_email
+  name     = trimsuffix(var.backend_gsa_email, ".gserviceaccount.com")
   instance = google_sql_database_instance.sarraf_db_instance.name
   type     = "CLOUD_IAM_SERVICE_ACCOUNT"
 }
