@@ -9,17 +9,12 @@ spec:
       serviceAccountName: sarraf-backend-ksa
       containers:
       - name: migrate
-        image: migrate/migrate:v4.17.0 # Official migration tool
+        image: migrate/migrate:v4.17.0
+        command: ["/bin/sh", "-c"]
         args:
-        - -path=/migrations/
-        - -database=postgres://sarraf_admin:$(DB_PASSWORD)@DATABASE_IP_PLACEHOLDER:5432/sarraf_interchange?sslmode=require
-        - up
-        env:
-        - name: DB_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: sarraf-db-password-sync
-              key: password
+        - |
+          DB_PASSWORD=$(cat /var/secrets/dbpassword.txt)
+          /migrate -path=/migrations/ -database="postgres://sarraf_admin:${DB_PASSWORD}@DATABASE_IP_PLACEHOLDER:5432/sarraf_interchange?sslmode=require" up
         volumeMounts:
         - name: migration-files
           mountPath: /migrations/
