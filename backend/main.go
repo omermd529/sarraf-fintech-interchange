@@ -103,4 +103,4 @@ func main() {
 	}
 }
 
-// This is a simple Go backend for the Sarraf Fintech Interchange project.
+// Sarraf Fintech Interchange - Cloud-Native Backend
