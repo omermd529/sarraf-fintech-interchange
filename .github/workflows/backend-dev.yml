@@ -89,28 +89,26 @@ jobs:
 
             - name: Run Database Migrations
               run: |
-                DB_CONN_NAME="${{ steps.tf_outputs.outputs.DB_CONN_NAME }}"
+                NAMESPACE="sarraf-dev"
+                DB_PRIVATE_IP="${{ steps.tf_outputs.outputs.DB_IP }}"
                 
-                # Download Cloud SQL Auth Proxy
-                curl -sSL https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.15.2/cloud-sql-proxy.linux.amd64 -o cloud-sql-proxy
-                chmod +x cloud-sql-proxy
+                # Update the migrations ConfigMap
+                kubectl create configmap sarraf-migrations-cm \
+                  --from-file=backend/migrations/ \
+                  -n $NAMESPACE \
+                  --dry-run=client -o yaml | kubectl apply -f -
                 
-                # Start proxy in background (connects to Cloud SQL via IAM)
-                ./cloud-sql-proxy "$DB_CONN_NAME" --port=5432 --private-ip &
-                PROXY_PID=$!
-                sleep 3
+                # Inject placeholders
+                sed -i "s|DATABASE_IP_PLACEHOLDER|$DB_PRIVATE_IP|g" backend/k8s/migration-job.yaml
                 
-                # Fetch DB password and URL-encode special characters
-                gcloud secrets versions access latest --secret=sarraf-db-password --project=${{ env.PROJECT_ID }} > /tmp/dbpass.txt
-                DB_PASS_ENCODED=$(python3 -c "import urllib.parse; print(urllib.parse.quote(open('/tmp/dbpass.txt').read().strip(), safe=''))")
-                rm -f /tmp/dbpass.txt
+                # Cleanup old job
+                kubectl delete job sarraf-db-migrate -n $NAMESPACE --ignore-not-found=true
                 
-                # Install and run golang-migrate
-                curl -sSL https://github.com/golang-migrate/migrate/releases/download/v4.17.0/migrate.linux-amd64.tar.gz | tar xz
-                ./migrate -path=backend/migrations/ -database="postgres://sarraf_admin:${DB_PASS_ENCODED}@localhost:5432/sarraf_interchange?sslmode=disable" up
+                # Deploy the Job
+                kubectl apply -f backend/k8s/migration-job.yaml
                 
-                # Cleanup
-                kill $PROXY_PID || true
+                # Wait for the result
+                kubectl wait --for=condition=complete job/sarraf-db-migrate -n $NAMESPACE --timeout=180s
 
             - name: Deploy to GKE
               run: |

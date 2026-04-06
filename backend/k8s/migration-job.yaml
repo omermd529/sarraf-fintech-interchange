@@ -7,25 +7,35 @@ spec:
   template:
     spec:
       serviceAccountName: sarraf-backend-ksa
+      restartPolicy: OnFailure
+      initContainers:
+      - name: wait-for-secret
+        image: alpine:3.19
+        command: ["sh", "-c", "until [ -f /var/secrets/dbpassword.txt ]; do echo waiting for secret; sleep 2; done;"]
+        volumeMounts:
+        - name: db-secret-volume
+          mountPath: "/var/secrets"
       containers:
       - name: migrate
         image: migrate/migrate:v4.17.0
+        command: ["/bin/sh", "-c"]
         args:
-        - -path=/migrations/
-        - -database=postgres://sarraf_admin:$(DB_PASSWORD)@DATABASE_IP_PLACEHOLDER:5432/sarraf_interchange?sslmode=require
-        - up
-        env:
-        - name: DB_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: sarraf-db-password-sync
-              key: password
+          - |
+            DB_PASS=$(cat /var/secrets/dbpassword.txt)
+            /migrate -path=/migrations/ -database="postgres://sarraf_admin:${DB_PASS}@DATABASE_IP_PLACEHOLDER:5432/sarraf_interchange?sslmode=disable" up
         volumeMounts:
         - name: migration-files
           mountPath: /migrations/
-      restartPolicy: OnFailure
+        - name: db-secret-volume
+          mountPath: "/var/secrets"
+          readOnly: true
       volumes:
       - name: migration-files
         configMap:
           name: sarraf-migrations-cm
-  backoffLimit: 4
+      - name: db-secret-volume
+        csi:
+          driver: secrets-store-gke.csi.k8s.io
+          readOnly: true
+          volumeAttributes:
+            secretProviderClass: "sarraf-db-secrets"
