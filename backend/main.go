@@ -23,9 +23,11 @@ func main() {
 	dbUser := os.Getenv("DB_USER")
 	dbPass := os.Getenv("DB_PASSWORD")
 	if passFile := os.Getenv("DB_PASSWORD_FILE"); passFile != "" {
-		if b, err := os.ReadFile(passFile); err == nil {
-			dbPass = strings.TrimSpace(string(b))
+		b, err := os.ReadFile(passFile)
+		if err != nil {
+			log.Fatalf("SECURITY: Failed to read DB secret from %s: %v", passFile, err)
 		}
+		dbPass = strings.TrimSpace(string(b))
 	}
 	dbName := os.Getenv("DB_NAME")
 
