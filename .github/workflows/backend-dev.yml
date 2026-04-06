@@ -86,34 +86,28 @@ jobs:
                   cluster_name: ${{ env.CLUSTER_NAME }}
                   location: ${{ env.REGION }}
 
-            - name: Sync DB Secret to Kubernetes
-              run: |
-                NAMESPACE="sarraf-dev"
-                DB_PASS=$(gcloud secrets versions access latest --secret=sarraf-db-password --project=${{ env.PROJECT_ID }})
-                kubectl create secret generic sarraf-db-password-sync \
-                  --from-literal=password="$DB_PASS" \
-                  -n $NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
-
             - name: Run Database Migrations
               run: |
-                NAMESPACE="sarraf-dev"
-                DB_PRIVATE_IP="${{ steps.tf_outputs.outputs.DB_IP }}"
+                DB_CONN_NAME="${{ steps.tf_outputs.outputs.DB_CONN_NAME }}"
                 
-                # Create ConfigMap from the migrations folder
-                kubectl create configmap sarraf-migrations-cm --from-file=backend/migrations/ -n $NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
+                # Download Cloud SQL Auth Proxy
+                curl -sSL https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.15.2/cloud-sql-proxy.linux.amd64 -o cloud-sql-proxy
+                chmod +x cloud-sql-proxy
                 
-                # Inject namespace and DB IP into migration job manifest
-                sed -i "s|NAMESPACE_PLACEHOLDER|$NAMESPACE|g" backend/k8s/migration-job.yaml
-                sed -i "s|DATABASE_IP_PLACEHOLDER|$DB_PRIVATE_IP|g" backend/k8s/migration-job.yaml
+                # Start proxy in background (connects to Cloud SQL via IAM)
+                ./cloud-sql-proxy "$DB_CONN_NAME" --port=5432 &
+                PROXY_PID=$!
+                sleep 3
                 
-                # Delete previous job if it exists (jobs are immutable)
-                kubectl delete job sarraf-db-migrate -n $NAMESPACE --ignore-not-found
+                # Fetch DB password and run migrations via localhost proxy
+                DB_PASS=$(gcloud secrets versions access latest --secret=sarraf-db-password --project=${{ env.PROJECT_ID }})
                 
-                # Run the Migration Job
-                kubectl apply -f backend/k8s/migration-job.yaml
+                # Install and run golang-migrate
+                curl -sSL https://github.com/golang-migrate/migrate/releases/download/v4.17.0/migrate.linux-amd64.tar.gz | tar xz
+                ./migrate -path=backend/migrations/ -database="postgres://sarraf_admin:${DB_PASS}@localhost:5432/sarraf_interchange?sslmode=disable" up
                 
-                # Wait for the job to complete (Autopilot may need time to provision a node)
-                kubectl wait --for=condition=complete job/sarraf-db-migrate -n $NAMESPACE --timeout=300s
+                # Cleanup
+                kill $PROXY_PID || true
 
             - name: Deploy to GKE
               run: |
