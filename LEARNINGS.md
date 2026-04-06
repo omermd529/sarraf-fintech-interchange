@@ -332,3 +332,79 @@ Node-Selectors: cloud.google.com/gke-spot=true
 11. **Private Cloud SQL instances** can't be reached from external CI/CD runners without VPN/IAP. Run migrations in-cluster.
 12. **`golang-migrate` dirty state** requires `force <version>` to reset before re-running. Consider adding this to migration scripts for resilience.
 13. **Init containers** are the production pattern for CSI secret dependencies — they guarantee the secret file exists before the main container starts.
+
+
+---
+
+## Issue 6: Cloud SQL Auth Proxy — Private IP Configuration
+
+**Symptom:**
+```
+failed to connect to instance: Config error: instance does not have IP of type "PUBLIC"
+```
+
+The Cloud SQL Auth Proxy sidecar in the backend deployment was trying to connect via public IP, but the Cloud SQL instance is configured with `ipv4_enabled = false` (private IP only).
+
+**Root Cause:** The `--private-ip` flag was missing from the Auth Proxy container args in `deployment.yaml`. By default, the Cloud SQL Auth Proxy attempts to connect via the instance's public IP. Since the Sarraf database is private-only (a SAMA data sovereignty requirement), this fails.
+
+**This same issue appeared twice:**
+1. First in the pipeline-based migration attempt (Challenge 5d) — the proxy on the GitHub runner couldn't reach the private IP at all since the runner is outside the VPC.
+2. Then in the GKE sidecar — the proxy was inside the VPC but still defaulting to public IP resolution.
+
+**Fix Applied:**
+Added `--private-ip` to the Cloud SQL Auth Proxy args in `backend/k8s/deployment.yaml`:
+```yaml
+args:
+- "--auto-iam-authn"
+- "--private-ip"
+- "--structured-logs"
+- "DB_CONNECTION_NAME_PLACEHOLDER"
+```
+
+**Key Lesson:**
+14. **Cloud SQL Auth Proxy defaults to public IP.** When using private-only Cloud SQL instances, always pass `--private-ip`. This applies to both sidecar containers and standalone proxy binaries.
+
+---
+
+## Issue 7: Migration Job — Final Success
+
+After 7+ iterations, the migration job finally completed using the **Init Container + URL-encoding** pattern.
+
+**Successful flow:**
+```
+Pipeline                    GKE Autopilot
+────────                    ─────────────
+kubectl apply job  ───────► Node provisioned (~2 min)
+                            ├── initContainer: wait-for-secret
+                            │   ├── CSI driver mounts /var/secrets/dbpassword.txt
+                            │   ├── python3 URL-encodes password
+                            │   └── writes to /tmp/shared/db_pass_encoded.txt
+                            └── container: migrate
+                                ├── reads encoded password from shared volume
+                                ├── force resets dirty state (version 1)
+                                └── runs migrations UP ✅
+```
+
+**Pipeline log confirmation:**
+```
+job.batch/sarraf-db-migrate created
+→ condition met (Completed)
+```
+
+**Database state after migration:**
+- `schema_migrations` table: version=1, dirty=false
+- Tables created: `users`, `merchants`, `transactions`
+- Indexes created: `idx_transactions_rrn`, `idx_users_username`
+- IAM user granted: `sarraf-backend-gsa@omerops-sarraf-dev.iam`
+
+---
+
+## Summary: Full Deployment Chain
+
+| Step | Status | Method |
+|:---|:---|:---|
+| Docker Build + Trivy Scan | ✅ | GitHub Actions |
+| Push to Artifact Registry | ✅ | Immutability-aware (skip if tag exists) |
+| Database Migration | ✅ | K8s Job + Init Container + CSI Secret |
+| Backend Deployment | 🔄 | Cloud SQL Auth Proxy sidecar (IAM Auth) |
+| Passwordless DB Auth | 🔄 | Workload Identity → Cloud SQL IAM Auth |
