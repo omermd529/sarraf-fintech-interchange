@@ -11,23 +11,40 @@ spec:
       initContainers:
       - name: wait-for-secret
         image: alpine:3.19
-        command: ["sh", "-c", "until [ -f /var/secrets/dbpassword.txt ]; do echo waiting for secret; sleep 2; done;"]
+        command: ["sh", "-c"]
+        args:
+          - |
+            echo "Waiting for secret file..."
+            until [ -f /var/secrets/dbpassword.txt ]; do sleep 2; done
+            echo "Secret found. URL-encoding password..."
+            apk add --no-cache python3 > /dev/null 2>&1
+            python3 -c "
+            import urllib.parse
+            pw = open('/var/secrets/dbpassword.txt').read().strip()
+            open('/tmp/shared/db_pass_encoded.txt','w').write(urllib.parse.quote(pw, safe=''))
+            "
+            echo "Done."
         volumeMounts:
         - name: db-secret-volume
           mountPath: "/var/secrets"
+        - name: shared
+          mountPath: "/tmp/shared"
       containers:
       - name: migrate
         image: migrate/migrate:v4.17.0
         command: ["/bin/sh", "-c"]
         args:
           - |
-            DB_PASS=$(cat /var/secrets/dbpassword.txt)
+            DB_PASS=$(cat /tmp/shared/db_pass_encoded.txt)
             /migrate -path=/migrations/ -database="postgres://sarraf_admin:${DB_PASS}@DATABASE_IP_PLACEHOLDER:5432/sarraf_interchange?sslmode=disable" up
         volumeMounts:
         - name: migration-files
           mountPath: /migrations/
         - name: db-secret-volume
           mountPath: "/var/secrets"
+          readOnly: true
+        - name: shared
+          mountPath: "/tmp/shared"
           readOnly: true
       volumes:
       - name: migration-files
@@ -39,3 +56,5 @@ spec:
           readOnly: true
           volumeAttributes:
             secretProviderClass: "sarraf-db-secrets"
+      - name: shared
+        emptyDir: {}
