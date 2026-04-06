@@ -67,6 +67,7 @@ spec:
         image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.15.2
         args:
         - "--auto-iam-authn"
+        - "--private-ip"
         - "--structured-logs"
         - "DB_CONNECTION_NAME_PLACEHOLDER"
         securityContext:
