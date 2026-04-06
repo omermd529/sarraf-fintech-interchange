@@ -99,12 +99,13 @@ jobs:
                 PROXY_PID=$!
                 sleep 3
                 
-                # Fetch DB password and run migrations via localhost proxy
+                # Fetch DB password and URL-encode special characters
                 DB_PASS=$(gcloud secrets versions access latest --secret=sarraf-db-password --project=${{ env.PROJECT_ID }})
+                DB_PASS_ENCODED=$(python3 -c "import urllib.parse; print(urllib.parse.quote('$DB_PASS', safe=''))")
                 
                 # Install and run golang-migrate
                 curl -sSL https://github.com/golang-migrate/migrate/releases/download/v4.17.0/migrate.linux-amd64.tar.gz | tar xz
-                ./migrate -path=backend/migrations/ -database="postgres://sarraf_admin:${DB_PASS}@localhost:5432/sarraf_interchange?sslmode=disable" up
+                ./migrate -path=backend/migrations/ -database="postgres://sarraf_admin:${DB_PASS_ENCODED}@localhost:5432/sarraf_interchange?sslmode=disable" up
                 
                 # Cleanup
                 kill $PROXY_PID || true
