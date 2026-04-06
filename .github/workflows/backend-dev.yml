@@ -96,7 +96,7 @@ jobs:
                 chmod +x cloud-sql-proxy
                 
                 # Start proxy in background (connects to Cloud SQL via IAM)
-                ./cloud-sql-proxy "$DB_CONN_NAME" --port=5432 &
+                ./cloud-sql-proxy "$DB_CONN_NAME" --port=5432 --private-ip &
                 PROXY_PID=$!
                 sleep 3
                 
