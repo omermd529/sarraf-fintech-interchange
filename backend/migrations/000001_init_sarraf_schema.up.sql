@@ -41,7 +41,7 @@ CREATE INDEX idx_transactions_rrn ON transactions(rrn);
 CREATE INDEX idx_users_username ON users(username);
 
 
--- 5. Grant IAM Service Account access (Passwordless Auth via Cloud SQL Auth Proxy)
+-- 5. Grant IAM Service Account access (Passwordless Auth via Cloud SQL Auth Proxy)--
 GRANT CONNECT ON DATABASE sarraf_interchange TO "sarraf-backend-gsa@omerops-sarraf-dev.iam";
 GRANT USAGE ON SCHEMA public TO "sarraf-backend-gsa@omerops-sarraf-dev.iam";
 GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO "sarraf-backend-gsa@omerops-sarraf-dev.iam";
