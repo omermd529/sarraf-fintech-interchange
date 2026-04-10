@@ -148,6 +148,14 @@ func main() {
 		})
 	})
 
+	http.HandleFunc("/balance", getBalanceHandler(dbPool))
+	http.HandleFunc("/transactions", getTransactionsHandler(dbPool))
+	http.HandleFunc("/merchants", getMerchantsHandler(dbPool))
+	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("UP"))
+	})
+
 	// 7. Start the Server
 	port := "8080"
 	log.Printf("Sarraf Backend starting on port %s...", port)
@@ -156,4 +164,85 @@ func main() {
 	}
 }
 
-// Sarraf Fintech Interchange - Cloud-Native Backend
+func getBalanceHandler(pool *pgxpool.Pool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		userID := r.URL.Query().Get("user_id")
+		var balance decimal.Decimal
+		var fullName string
+
+		err := pool.QueryRow(r.Context(),
+			"SELECT full_name, balance_sar FROM users WHERE user_id = $1", userID).Scan(&fullName, &balance)
+		if err != nil {
+			http.Error(w, `{"error":"user not found"}`, http.StatusNotFound)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"full_name":   fullName,
+			"balance_sar": balance,
+			"currency":    "SAR",
+		})
+	}
+}
+
+func getTransactionsHandler(pool *pgxpool.Pool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		userID := r.URL.Query().Get("user_id")
+
+		rows, err := pool.Query(r.Context(), `
+			SELECT rrn, amount, fee_amount, status, created_at
+			FROM transactions
+			WHERE sender_id = $1 OR receiver_id = $1
+			ORDER BY created_at DESC LIMIT 10`, userID)
+		if err != nil {
+			http.Error(w, `{"error":"query failed"}`, http.StatusInternalServerError)
+			return
+		}
+		defer rows.Close()
+
+		var txs []map[string]interface{}
+		for rows.Next() {
+			var rrn, status string
+			var amount, fee decimal.Decimal
+			var createdAt time.Time
+			rows.Scan(&rrn, &amount, &fee, &status, &createdAt)
+			txs = append(txs, map[string]interface{}{
+				"rrn":        rrn,
+				"amount":     amount,
+				"fee":        fee,
+				"status":     status,
+				"created_at": createdAt,
+			})
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(txs)
+	}
+}
+
+func getMerchantsHandler(pool *pgxpool.Pool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		rows, err := pool.Query(r.Context(), "SELECT merchant_id, business_name, category FROM merchants")
+		if err != nil {
+			http.Error(w, `{"error":"query failed"}`, http.StatusInternalServerError)
+			return
+		}
+		defer rows.Close()
+
+		var merchants []map[string]interface{}
+		for rows.Next() {
+			var id uuid.UUID
+			var name, cat string
+			rows.Scan(&id, &name, &cat)
+			merchants = append(merchants, map[string]interface{}{
+				"merchant_id":   id,
+				"business_name": name,
+				"category":      cat,
+			})
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(merchants)
+	}
+}

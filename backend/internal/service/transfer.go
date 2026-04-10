@@ -42,7 +42,13 @@ func (s *TransferService) ProcessPayment(ctx context.Context, userID, merchantID
 		return "", fmt.Errorf("deduction failed: %v", err)
 	}
 
-	// 4. Record transaction with RRN
+	// 4. Credit fee to treasury
+	_, err = tx.Exec(ctx, "UPDATE users SET balance_sar = balance_sar + $1 WHERE user_id = '00000000-0000-0000-0000-000000000000'", feeAmount)
+	if err != nil {
+		return "", fmt.Errorf("treasury credit failed: %v", err)
+	}
+
+	// 5. Record transaction with RRN
 	rrn := uuid.New().String()[:12]
 	_, err = tx.Exec(ctx, `
 		INSERT INTO transactions (sender_id, merchant_id, amount, fee_amount, status, rrn, description)
@@ -52,7 +58,7 @@ func (s *TransferService) ProcessPayment(ctx context.Context, userID, merchantID
 		return "", fmt.Errorf("ledger entry failed: %v", err)
 	}
 
-	// 5. Commit the atomic unit
+	// 6. Commit the atomic unit
 	if err := tx.Commit(ctx); err != nil {
 		return "", err
 	}
