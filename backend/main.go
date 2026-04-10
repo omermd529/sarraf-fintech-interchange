@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -10,7 +11,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/omerops/sarraf-backend/internal/service"
+	"github.com/shopspring/decimal"
 )
 
 func main() {
@@ -83,7 +87,10 @@ func main() {
 		log.Fatalf("Could not connect to DB after retries: %v", err)
 	}
 
-	// 5. Define HTTP Routes.
+	// 5. Initialize Services
+	transferSvc := &service.TransferService{DB: dbPool}
+
+	// 6. Define HTTP Routes.
 	http.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		err := dbPool.Ping(r.Context())
 		if err != nil {
@@ -95,7 +102,53 @@ func main() {
 		fmt.Fprintf(w, "Sarraf API is healthy")
 	})
 
-	// 6. Start the Server
+	http.HandleFunc("/pay", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+
+		var req struct {
+			UserID     string `json:"user_id"`
+			MerchantID string `json:"merchant_id"`
+			Amount     string `json:"amount"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
+			return
+		}
+
+		userID, err := uuid.Parse(req.UserID)
+		if err != nil {
+			http.Error(w, `{"error":"invalid user_id"}`, http.StatusBadRequest)
+			return
+		}
+		merchantID, err := uuid.Parse(req.MerchantID)
+		if err != nil {
+			http.Error(w, `{"error":"invalid merchant_id"}`, http.StatusBadRequest)
+			return
+		}
+		amount, err := decimal.NewFromString(req.Amount)
+		if err != nil || amount.LessThanOrEqual(decimal.Zero) {
+			http.Error(w, `{"error":"invalid amount"}`, http.StatusBadRequest)
+			return
+		}
+
+		rrn, err := transferSvc.ProcessPayment(r.Context(), userID, merchantID, amount)
+		if err != nil {
+			log.Printf("Payment failed: %v", err)
+			http.Error(w, fmt.Sprintf(`{"error":"%s"}`, err.Error()), http.StatusUnprocessableEntity)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{
+			"status": "COMPLETED",
+			"rrn":    rrn,
+		})
+	})
+
+	// 7. Start the Server
 	port := "8080"
 	log.Printf("Sarraf Backend starting on port %s...", port)
 	if err := http.ListenAndServe(":"+port, nil); err != nil {
