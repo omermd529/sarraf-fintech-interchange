@@ -486,3 +486,116 @@ Go App (localhost:5432)
 | `3348c9c` | Force-reset dirty DB state |
 | `115cf53` | `--private-ip` on Auth Proxy sidecar |
 | `d8aab88` | **Full stack live** ✅ |
+
+
+---
+
+## 🏆 Milestone: Atomic Payment Engine — First Transaction Processed
+
+**Date:** April 2025
+
+Successfully executed the first **ACID-compliant financial transaction** on the Sarraf Interchange. The payment engine deducted funds, calculated interchange fees, and recorded an immutable ledger entry — all within a single database transaction.
+
+### Transaction Proof
+
+```
+ username | balance_sar
+----------+-------------
+ omer_dev |      949.50
+
+     rrn      | amount | fee_amount |  status
+--------------+--------+------------+-----------
+ 07cebf95-288 |  50.00 |       0.50 | COMPLETED
+```
+
+- **Initial Balance:** 1000.00 SAR
+- **Payment Amount:** 50.00 SAR
+- **Interchange Fee (1%):** 0.50 SAR
+- **Total Deduction:** 50.50 SAR
+- **Final Balance:** 949.50 SAR ✅
+
+### What Was Built
+
+| Component | File | Purpose |
+|:---|:---|:---|
+| Domain Models | `backend/internal/models/models.go` | UUID + Decimal structs for financial precision |
+| Transfer Service | `backend/internal/service/transfer.go` | ACID payment logic with row locking |
+| Payment Endpoint | `backend/main.go` (`/pay`) | HTTP handler with input validation |
+
+### Issues Faced During This Phase
+
+#### Issue 8: Container Name Mismatch — `exec` Failures
+
+**Symptom:**
+```
+Error from server (BadRequest): container sarraf-backend is not valid for pod sarraf-backend-5fd6c57846-bkcrt
+```
+
+**Root Cause:** Attempted `kubectl exec -c sarraf-backend` but the deployment defines containers as `sarraf-api` and `cloud-sql-proxy`. The pod name (`sarraf-backend-*`) is different from the container name (`sarraf-api`).
+
+**Fix:** Use `-c sarraf-api` for the app container or `-c cloud-sql-proxy` for the sidecar.
+
+#### Issue 9: Distroless Image — No Shell Available
+
+**Symptom:**
+```
+exec failed: unable to start container process: exec: "/bin/sh": stat /bin/sh: no such file or directory
+```
+
+**Root Cause:** The `sarraf-api` container uses Google Distroless (`gcr.io/distroless/static`), which has no shell, no package manager, and no utilities. This is by design — it minimizes attack surface but prevents `kubectl exec` for debugging.
+
+**Fix:** Use `kubectl port-forward` to access services from the local machine instead of exec-ing into the container. For database access:
+```bash
+# Terminal 1: Forward Cloud SQL Proxy port
+kubectl port-forward <pod> -n sarraf-dev 5432:5432
+
+# Terminal 2: Connect with local psql
+psql -h 127.0.0.1 -p 5432 -U sarraf_admin -d sarraf_interchange
+```
+
+#### Issue 10: Migration File Name Mismatch
+
+**Symptom:** `golang-migrate` reported `no change` even after dropping `schema_migrations`.
+
+**Root Cause:** The up/down migration files had mismatched names:
+- `000001_init_sarraf_schema.up.sql`
+- `000001_init.down.sql` ← different prefix
+
+`golang-migrate` expects the name after the version number to match for up/down pairs.
+
+**Fix:** Renamed `000001_init.down.sql` → `000001_init_sarraf_schema.down.sql`.
+
+#### Issue 11: DATABASE_IP_PLACEHOLDER in Migration Job
+
+**Symptom:** Migration job failed to connect — was trying to resolve literal string `DATABASE_IP_PLACEHOLDER` as a hostname.
+
+**Root Cause:** The `migration-job.yaml` template was never updated with the actual Cloud SQL private IP.
+
+**Fix:** Replaced `DATABASE_IP_PLACEHOLDER` with `10.20.0.3` (Cloud SQL private IP).
+
+### ACID Compliance Verified
+
+| Property | Implementation |
+|:---|:---|
+| **Atomicity** | `db.Begin()` + `defer tx.Rollback()` — all-or-nothing |
+| **Consistency** | `FOR UPDATE` row lock prevents double-spending |
+| **Isolation** | PostgreSQL default `READ COMMITTED` isolation level |
+| **Durability** | `tx.Commit()` ensures write-ahead log flush |
+
+### Key Lessons
+
+15. **Container names ≠ pod names.** Always check `deployment.yaml` for actual container names before using `kubectl exec -c`.
+16. **Distroless images are un-debuggable by design.** Use `port-forward` or ephemeral debug containers instead of `exec`.
+17. **`golang-migrate` requires matching up/down filenames** after the version prefix. Mismatched names cause silent failures.
+18. **Never use `float64` for money in Go.** `shopspring/decimal` maps exactly to PostgreSQL's `NUMERIC(18,2)` — zero rounding errors.
+19. **`FOR UPDATE` is essential for financial transactions.** Without it, concurrent requests can read the same balance and double-spend.
+
+---
+
+## 🔮 Next Steps: Portfolio Evolution
+
+| Phase | Goal | Technology |
+|:---|:---|:---|
+| **Observability** | Export `sarraf_transactions_total` metric | Prometheus + Grafana |
+| **Fraud Detection** | Flag suspicious transactions by amount/frequency | Python ML microservice |
+| **Service Mesh** | Encrypt backend ↔ DB traffic with mTLS | Istio on GKE |
