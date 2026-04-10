@@ -91,7 +91,9 @@ func main() {
 	transferSvc := &service.TransferService{DB: dbPool}
 
 	// 6. Define HTTP Routes.
-	http.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		err := dbPool.Ping(r.Context())
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -102,7 +104,7 @@ func main() {
 		fmt.Fprintf(w, "Sarraf API is healthy")
 	})
 
-	http.HandleFunc("/pay", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/pay", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
 			return
@@ -148,10 +150,10 @@ func main() {
 		})
 	})
 
-	http.HandleFunc("/balance", getBalanceHandler(dbPool))
-	http.HandleFunc("/transactions", getTransactionsHandler(dbPool))
-	http.HandleFunc("/merchants", getMerchantsHandler(dbPool))
-	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/balance", getBalanceHandler(dbPool))
+	mux.HandleFunc("/transactions", getTransactionsHandler(dbPool))
+	mux.HandleFunc("/merchants", getMerchantsHandler(dbPool))
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("UP"))
 	})
@@ -159,9 +161,22 @@ func main() {
 	// 7. Start the Server
 	port := "8080"
 	log.Printf("Sarraf Backend starting on port %s...", port)
-	if err := http.ListenAndServe(":"+port, nil); err != nil {
+	if err := http.ListenAndServe(":"+port, corsMiddleware(mux)); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func getBalanceHandler(pool *pgxpool.Pool) http.HandlerFunc {
