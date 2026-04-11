@@ -1,0 +1,89 @@
+name: Frontend Dev Deploy
+
+on:
+    push:
+        branches: [development]
+        paths:
+            - 'frontend/**'
+            - '.github/workflows/frontend-dev.yml'
+
+env:
+    PROJECT_ID: omerops-sarraf-dev
+    REGION: me-central1
+    REPO_NAME: sarraf-docker-repo
+    IMAGE_NAME: sarraf-frontend
+    CLUSTER_NAME: sarraf-cluster-dev
+
+jobs:
+    build-and-deploy:
+        name: Build, Scan, and Deploy Frontend to GKE
+        runs-on: ubuntu-latest
+        permissions:
+            contents: read
+            id-token: write
+
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Authenticate to Google Cloud
+              id: auth
+              uses: google-github-actions/auth@v2
+              with:
+                  workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+                  service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+            - name: Setup Cloud SDK
+              uses: google-github-actions/setup-gcloud@v2
+
+            - name: Configure Docker for artifact registry
+              run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+            - name: Build Local Docker Image
+              run: |
+                  docker build \
+                    --build-arg NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_URL }} \
+                    --build-arg NEXT_PUBLIC_USER_ID=${{ secrets.NEXT_PUBLIC_USER_ID }} \
+                    -t sarraf-frontend:${{ github.sha }} ./frontend
+
+            - name: Run Trivy vulnerability scanner
+              uses: aquasecurity/trivy-action@master
+              with:
+                  image-ref: 'sarraf-frontend:${{ github.sha }}'
+                  format: 'table'
+                  exit-code: '1'
+                  ignore-unfixed: true
+                  vuln-type: 'os,library'
+                  severity: 'CRITICAL,HIGH'
+
+            - name: Check and Push Docker Image
+              run: |
+                  REMOTE_TAG="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
+                  
+                  if gcloud artifacts docker images describe "$REMOTE_TAG" > /dev/null 2>&1; then
+                    echo "Tag ${{ github.sha }} already exists. Skipping push to respect Immutability."
+                  else
+                    echo "Tag not found. Pushing new image..."
+                    docker tag sarraf-frontend:${{ github.sha }} "$REMOTE_TAG"
+                    docker push "$REMOTE_TAG"
+                  fi
+
+            - name: Get GKE Credentials
+              uses: google-github-actions/get-gke-credentials@v2
+              with:
+                  cluster_name: ${{ env.CLUSTER_NAME }}
+                  location: ${{ env.REGION }}
+
+            - name: Deploy to GKE
+              run: |
+                IMAGE_FULL_PATH="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
+                NAMESPACE="sarraf-dev"
+                
+                # Injection
+                sed -i "s|IMAGE_PLACEHOLDER|$IMAGE_FULL_PATH|g" frontend/k8s/deployment.yaml
+                sed -i "s|NAMESPACE_PLACEHOLDER|$NAMESPACE|g" frontend/k8s/deployment.yaml
+                sed -i "s|NAMESPACE_PLACEHOLDER|$NAMESPACE|g" frontend/k8s/service.yaml
+                
+                # Deploy
+                kubectl apply -f frontend/k8s/
+                kubectl rollout status deployment/sarraf-frontend -n $NAMESPACE --timeout=300s

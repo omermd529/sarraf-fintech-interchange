@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: sarraf-frontend
-  namespace: NAMESPACE_PLACEHOLDER
+  namespace: sarraf-dev
   labels:
     app: sarraf-frontend
 spec:
