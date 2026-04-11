@@ -599,3 +599,166 @@ psql -h 127.0.0.1 -p 5432 -U sarraf_admin -d sarraf_interchange
 | **Observability** | Export `sarraf_transactions_total` metric | Prometheus + Grafana |
 | **Fraud Detection** | Flag suspicious transactions by amount/frequency | Python ML microservice |
 | **Service Mesh** | Encrypt backend ↔ DB traffic with mTLS | Istio on GKE |
+
+
+---
+
+## 🏆 Milestone: Phase 2 — Frontend Dashboard Deployed to GKE
+
+**Date:** April 2025
+
+Successfully built, containerized, and deployed the Sarraf Fintech Dashboard (Next.js) to GKE alongside the Go backend. The frontend is accessible via a LoadBalancer external IP and communicates with the backend API for real-time balance, payments, and transaction history.
+
+### What Was Built
+
+| Component | File | Purpose |
+|:---|:---|:---|
+| Dashboard Page | `frontend/src/app/page.tsx` | Balance, system health, last 5 transactions |
+| Pay Page | `frontend/src/app/pay/page.tsx` | Merchant select, amount input, fee breakdown, RRN confirmation |
+| History Page | `frontend/src/app/history/page.tsx` | Full transaction audit trail |
+| Navbar | `frontend/src/components/Navbar.tsx` | Sarraf SVG logo, nav links, EN/AR toggle |
+| Currency Formatter | `frontend/src/lib/currency.ts` | `Intl.NumberFormat('en-SA', { currency: 'SAR' })` |
+| Dockerfile | `frontend/Dockerfile` | Multi-stage build (deps → build → runner) |
+| CI/CD Pipeline | `.github/workflows/frontend-dev.yml` | Build, Trivy scan, push, deploy to GKE |
+| K8s Deployment | `frontend/k8s/deployment.yaml` | GKE deployment with health checks |
+| K8s Service | `frontend/k8s/service.yaml` | LoadBalancer on port 80 → 3000 |
+
+---
+
+### Issues Faced During Phase 2
+
+#### Issue 12: Shadcn Components Not Found — Build Error
+
+**Symptom:**
+```
+Module not found: Can't resolve '@/components/ui/card'
+```
+
+**Root Cause:** `npx shadcn@latest init` was run but the individual components (`card`, `table`, `input`, `select`) were never installed. Only `button` was added.
+
+**Fix:** Installed missing components explicitly:
+```bash
+npx shadcn@latest add card table input select
+```
+
+**Lesson:** `shadcn init` only sets up the config — each component must be added individually with `shadcn add`.
+
+---
+
+#### Issue 13: CORS Error — Frontend Cannot Reach Backend
+
+**Symptom:**
+```
+TypeError: Failed to fetch
+```
+Browser console showed CORS policy blocking requests from `localhost:3000` to `34.18.147.101`.
+
+**Root Cause:** The Go backend had no CORS headers. Browsers enforce Same-Origin Policy, blocking cross-origin API calls without explicit `Access-Control-Allow-Origin` headers.
+
+**Fix:** Added a CORS middleware in `backend/main.go`:
+```go
+func corsMiddleware(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        w.Header().Set("Access-Control-Allow-Origin", "*")
+        w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+        if r.Method == http.MethodOptions {
+            w.WriteHeader(http.StatusNoContent)
+            return
+        }
+        next.ServeHTTP(w, r)
+    })
+}
+```
+Switched from `http.HandleFunc` (default mux) to a custom `http.NewServeMux()` wrapped with the CORS middleware.
+
+**Lesson:** Any frontend-backend split architecture requires CORS headers on the API. For production, replace `*` with the specific frontend domain.
+
+---
+
+#### Issue 14: Nested Git Repository — Frontend as Submodule
+
+**Symptom:**
+```
+warning: adding embedded git repository: frontend
+```
+
+**Root Cause:** `npx create-next-app` initializes its own `.git` directory inside `frontend/`. When committed to the parent repo, Git treats it as a submodule instead of a regular directory.
+
+**Fix:**
+```bash
+rm -rf frontend/.git
+git rm --cached frontend
+git add frontend/
+```
+
+**Lesson:** Always remove `.git` from scaffolded projects before committing to a monorepo.
+
+---
+
+#### Issue 15: Dark Mode — Text Invisible on Dark Background
+
+**Symptom:** Card text, table cells, and fee columns were nearly invisible — dark text on dark background.
+
+**Root Cause:** Shadcn's CSS variables default to light mode (`:root` has white background, dark foreground). The UI used Tailwind's `bg-zinc-950` but shadcn components used `--card-foreground` which was dark in light mode.
+
+**Fix:** Added `dark` class to the `<html>` tag in `layout.tsx`:
+```tsx
+<html lang="en" className={`... dark`}>
+```
+This activates shadcn's `.dark` CSS variables (light text on dark backgrounds). Also changed `text-zinc-500` to `text-zinc-400` on fee columns for better contrast.
+
+**Lesson:** Shadcn requires the `dark` class on `<html>` to activate dark mode CSS variables. Tailwind utility classes alone aren't enough for shadcn components.
+
+---
+
+#### Issue 16: Trivy CVEs Blocking Frontend Pipeline
+
+**Symptom:**
+```
+Total: 3 (HIGH: 3, CRITICAL: 0)
+- CVE-2026-28390: libcrypto3/libssl3 (OpenSSL DoS)
+- CVE-2026-22184: zlib (buffer overflow)
+- CVE-2026-33671: picomatch (ReDoS) — bundled in npm
+```
+Pipeline exited with code 1.
+
+**Root Cause:** 
+1. Alpine base image (`node:22-alpine`) shipped with outdated `libcrypto3`, `libssl3`, and `zlib` packages.
+2. The `picomatch` CVE was in npm's own bundled copy at `/usr/local/lib/node_modules/npm/`, not in the app's dependencies.
+
+**Fix:**
+1. Pinned `node:22-alpine3.21` and added `RUN apk upgrade --no-cache` in all three stages to patch OS-level CVEs.
+2. Removed npm and yarn from the runner stage since it only needs `node server.js`:
+```dockerfile
+RUN apk upgrade --no-cache && \
+    rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /opt/yarn*
+```
+
+**Lesson:** 
+- Always `apk upgrade` in Dockerfiles to pick up security patches beyond what the base image ships.
+- Remove unused package managers from production images — they carry their own dependency trees with potential CVEs.
+- Trivy scans the entire filesystem, including system-level packages that aren't part of your app.
+
+---
+
+### Production Readiness Assessment
+
+| Item | Dev Status | Prod Action Needed |
+|:---|:---|:---|
+| K8s manifests (namespace) | `NAMESPACE_PLACEHOLDER` via `sed` | ✅ Ready — pipeline injects per-env value |
+| K8s manifests (image) | `IMAGE_PLACEHOLDER` via `sed` | ✅ Ready |
+| Migration job DB IP | `10.20.0.3` hardcoded | ⚠️ Revert to `DATABASE_IP_PLACEHOLDER`, fetch from Terraform output |
+| Frontend API URL | GitHub Secret `NEXT_PUBLIC_API_URL` | ⚠️ Set prod backend IP/domain in prod secrets |
+| Pipeline project/cluster | Hardcoded in `backend-dev.yml` | ⚠️ Create `backend-prod.yml` with prod values |
+| CORS origin | `Access-Control-Allow-Origin: *` | ⚠️ Restrict to prod frontend domain |
+
+### Key Lessons
+
+20. **`shadcn init` ≠ components installed.** Each UI component must be added individually with `shadcn add`.
+21. **CORS middleware is mandatory** for any frontend-backend split architecture. Always handle OPTIONS preflight requests.
+22. **Remove nested `.git` directories** from scaffolded projects before committing to a monorepo.
+23. **Shadcn dark mode requires `dark` class on `<html>`**, not just Tailwind dark utility classes.
+24. **`apk upgrade` in Dockerfiles** patches OS-level CVEs that the base image ships with.
+25. **Remove unused package managers from production containers** — npm/yarn carry their own dependency trees that Trivy will flag.
+26. **`NEXT_PUBLIC_*` env vars are baked at build time** in Next.js. They must be passed as `--build-arg` in Docker, not runtime env vars.
