@@ -1,0 +1,32 @@
+<svg width="100%" viewBox="0 0 680 340" role="img" xmlns="http://www.w3.org/2000/svg">
+<title style="fill:rgb(0, 0, 0);stroke:none;color:rgb(0, 0, 0);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto">صَرَّاف business logo</title>
+<desc style="fill:rgb(0, 0, 0);stroke:none;color:rgb(0, 0, 0);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto">A modern logo featuring the Arabic word صَرَّاف in white on a deep teal rounded rectangle, with a golden geometric accent</desc>
+<defs>
+<linearGradient id="tealGrad" x1="0" y1="0" x2="1" y2="1">
+<stop offset="0%" stop-color="#0D4F4F"/>
+<stop offset="100%" stop-color="#0A3D3D"/>
+</linearGradient>
+<linearGradient id="goldGrad" x1="0" y1="0" x2="1" y2="0">
+<stop offset="0%" stop-color="#C9973B"/>
+<stop offset="50%" stop-color="#E8B84B"/>
+<stop offset="100%" stop-color="#C9973B"/>
+</linearGradient>
+</defs>
+
+<rect x="140" y="40" width="400" height="200" rx="20" fill="url(#tealGrad)" style="stroke:none;color:rgb(0, 0, 0);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+
+<line x1="190" y1="185" x2="490" y2="185" stroke="url(#goldGrad)" stroke-width="1.5" style="fill:rgb(0, 0, 0);color:rgb(0, 0, 0);stroke-width:1.5px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+
+<g transform="translate(340, 75)" style="fill:rgb(0, 0, 0);stroke:none;color:rgb(0, 0, 0);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto">
+<polygon points="0,-18 5,-8 16,-6 8,2 10,14 0,8 -10,14 -8,2 -16,-6 -5,-8" fill="none" stroke="#E8B84B" stroke-width="1" opacity="0.5" style="fill:none;stroke:rgb(232, 184, 75);color:rgb(0, 0, 0);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:0.5;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+</g>
+
+<text x="340" y="155" text-anchor="middle" font-family="'Noto Sans Arabic', 'Geeza Pro', 'Traditional Arabic', 'Arabic Typesetting', sans-serif" font-size="64" font-weight="700" fill="#FFFFFF" direction="rtl" unicode-bidi="bidi-override" style="fill:rgb(255, 255, 255);stroke:none;color:rgb(0, 0, 0);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Noto Sans Arabic&quot;, &quot;Geeza Pro&quot;, &quot;Traditional Arabic&quot;, &quot;Arabic Typesetting&quot;, sans-serif;font-size:64px;font-weight:700;text-anchor:middle;dominant-baseline:auto">صَرَّاف</text>
+
+<text x="340" y="215" text-anchor="middle" font-family="'Noto Sans Arabic', 'Geeza Pro', sans-serif" font-size="14" fill="#E8B84B" letter-spacing="6" direction="rtl" style="fill:rgb(232, 184, 75);stroke:none;color:rgb(0, 0, 0);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Noto Sans Arabic&quot;, &quot;Geeza Pro&quot;, sans-serif;font-size:14px;font-weight:400;text-anchor:middle;dominant-baseline:auto">ṢARRĀF</text>
+
+<rect x="305" y="262" width="70" height="2" rx="1" fill="#E8B84B" opacity="0.4" style="fill:rgb(232, 184, 75);stroke:none;color:rgb(0, 0, 0);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:0.4;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+
+<text x="340" y="290" text-anchor="middle" font-family="var(--font-sans)" font-size="12" fill="#0A3D3D" letter-spacing="3" font-weight="500" style="fill:rgb(10, 61, 61);stroke:none;color:rgb(0, 0, 0);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, sans-serif;font-size:12px;font-weight:500;text-anchor:middle;dominant-baseline:auto">EXCHANGE</text>
+
+</svg>
