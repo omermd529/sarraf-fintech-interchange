@@ -18,3 +18,8 @@ output "backend_gsa_email" {
   value       = module.iam.backend_gsa_email
   description = "The backend GSA email for IAM DB auth"
 }
+
+output "ingress_ip" {
+  value       = google_compute_global_address.sarraf_static_ip.address
+  description = "Static IP for GKE Ingress / DNS A record"
+}

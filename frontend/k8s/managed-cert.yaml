@@ -1,0 +1,9 @@
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: sarraf-ssl-cert
+  namespace: sarraf-dev
+spec:
+  domains:
+    - omerops.com
+    - sarraf.omerops.com

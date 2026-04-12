@@ -38,6 +38,11 @@ module "iam" {
   project_id = var.project_id
 }
 
+# Static Global IP for GKE Ingress
+resource "google_compute_global_address" "sarraf_static_ip" {
+  name = "sarraf-static-ip"
+}
+
 output "vpc_id" {
   value = module.vpc.vpc_id
 }
