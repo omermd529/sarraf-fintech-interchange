@@ -762,3 +762,169 @@ RUN apk upgrade --no-cache && \
 24. **`apk upgrade` in Dockerfiles** patches OS-level CVEs that the base image ships with.
 25. **Remove unused package managers from production containers** — npm/yarn carry their own dependency trees that Trivy will flag.
 26. **`NEXT_PUBLIC_*` env vars are baked at build time** in Next.js. They must be passed as `--build-arg` in Docker, not runtime env vars.
+
+
+---
+
+## 🏆 Milestone: Phase 3 — Custom Domain, SSL & GKE Ingress
+
+**Date:** April 2025
+
+Successfully configured custom domain routing with Google-managed SSL certificates on GKE Autopilot. The Sarraf Interchange is now live at:
+- `https://sarraf.omerops.com` → Frontend Dashboard
+- `https://api.omerops.com` → Backend API
+- `https://omerops.com` → Frontend Landing
+- SSL cert auto-renews (expires July 12, 2026)
+
+### What Was Built
+
+| Component | File/Resource | Purpose |
+|:---|:---|:---|
+| Static Global IP | `terraform/environments/dev/main.tf` | `google_compute_global_address` for persistent ingress IP |
+| Managed Certificate | `frontend/k8s/managed-cert.yaml` | Google-managed SSL for 3 domains |
+| GKE Ingress | `frontend/k8s/ingress.yaml` | Routes traffic to frontend/backend services |
+| HTTP Load Balancing | `terraform/modules/gke/main.tf` | `addons_config.http_load_balancing` enabled |
+
+---
+
+### Issues Faced During Phase 3
+
+#### Issue 17: GKE Ingress Not Assigning Address — No Events
+
+**Symptom:**
+```
+NAME             CLASS   HOSTS                                            ADDRESS   PORTS   AGE
+sarraf-ingress   gce     sarraf.omerops.com,api.omerops.com,omerops.com             80      37m
+```
+Ingress had no `ADDRESS` and `Events: <none>` for over 30 minutes.
+
+**Root Cause:** The HTTP Load Balancing add-on was disabled on the GKE Autopilot cluster. Without it, the GCE ingress controller doesn't exist and no load balancer is created.
+
+**Fix:** Enabled the add-on via `gcloud` and added it to Terraform for reproducibility:
+```hcl
+addons_config {
+  http_load_balancing {
+    disabled = false
+  }
+}
+```
+
+**Lesson:** GKE Autopilot doesn't always have HTTP Load Balancing enabled by default. Always explicitly set it in Terraform.
+
+---
+
+#### Issue 18: GKE Ingress Ignoring `ingressClassName` — Controller Not Processing
+
+**Symptom:** Ingress showed `CLASS: gce` but no events, no NEGs created, no load balancer provisioned.
+
+**Root Cause:** Per GCP documentation, GKE Ingress **only** reads the `kubernetes.io/ingress.class` annotation. The `spec.ingressClassName` field is completely ignored by the GKE ingress controller. The deprecation warning from Kubernetes is misleading — GKE explicitly states to keep using the annotation.
+
+**Fix:** Switched from `spec.ingressClassName: "gce"` to annotation:
+```yaml
+annotations:
+  kubernetes.io/ingress.class: "gce"
+```
+
+**Key Quote from GCP Docs:** *"Although the kubernetes.io/ingress.class annotation is deprecated in Kubernetes, GKE continues to use this annotation. You must use this annotation to identify the Ingress class."*
+
+**Lesson:** GKE Ingress is annotation-based only. Ignore the Kubernetes deprecation warning for `kubernetes.io/ingress.class`.
+
+---
+
+#### Issue 19: Services Must Be ClusterIP for GKE Ingress
+
+**Symptom:** Old LoadBalancer resources stuck deleting with `resourceNotReady` errors when switching service types.
+
+**Root Cause:** Both frontend and backend services were `type: LoadBalancer`, which creates standalone L4 load balancers. GKE Ingress creates its own L7 load balancer and requires `ClusterIP` or `NodePort` backends.
+
+**Fix:** Changed both services to `type: ClusterIP` and patched the running services:
+```bash
+kubectl patch svc sarraf-frontend-service -n sarraf-dev -p '{"spec":{"type":"ClusterIP"}}'
+kubectl patch svc sarraf-backend-service -n sarraf-dev -p '{"spec":{"type":"ClusterIP"}}'
+```
+
+**Lesson:** When using GKE Ingress, backend services should be `ClusterIP`. The Ingress handles all external access. Don't mix `LoadBalancer` services with Ingress — they create conflicting LB resources.
+
+---
+
+#### Issue 20: SSL Certificate `FailedNotVisible` — Chicken-and-Egg
+
+**Symptom:**
+```
+Domain Status:
+  Domain:  sarraf.omerops.com
+  Status:  FailedNotVisible
+```
+
+**Root Cause:** The ManagedCertificate was created before the Ingress had an address. Google's certificate authority tried to verify the domain but the LB wasn't serving traffic yet, so verification failed.
+
+**Fix:** Deleted and recreated the ManagedCertificate after the Ingress had an address and backends were healthy:
+```bash
+kubectl delete managedcertificate sarraf-ssl-cert -n sarraf-dev
+kubectl apply -f frontend/k8s/managed-cert.yaml
+```
+
+**Lesson:** Create the ManagedCertificate after the Ingress is fully provisioned with an address. If it gets stuck in `FailedNotVisible`, delete and recreate it — the controller retries automatically.
+
+---
+
+#### Issue 21: HTTPS Empty Reply — `allow-http: false` Before Cert Active
+
+**Symptom:**
+```
+curl: (52) Empty reply from server
+```
+Both HTTP and HTTPS returned empty replies.
+
+**Root Cause:** `kubernetes.io/ingress.allow-http: "false"` was set, which disables the HTTP forwarding rule. But the SSL cert was still `Provisioning`, so HTTPS also didn't work. The ingress controller even logged:
+```
+Error: both HTTP and HTTPS are disabled (kubernetes.io/ingress.allow-http is false and there is no valid TLS configuration)
+```
+
+**Fix:** Temporarily set `allow-http: "true"` to enable HTTP while the cert provisioned. Once the cert was `Active`, switched back to `"false"` to enforce HTTPS-only.
+
+**Lesson:** Don't disable HTTP until the SSL cert is `Active`. The sequence is:
+1. Deploy Ingress with `allow-http: "true"`
+2. Wait for cert to become `Active`
+3. Switch to `allow-http: "false"` to enforce HTTPS
+
+---
+
+#### Issue 22: SSL Cert Active But HTTPS Still Failing
+
+**Symptom:**
+```
+curl: (35) LibreSSL SSL_connect: SSL_ERROR_SYSCALL in connection to sarraf.omerops.com:443
+```
+ManagedCertificate showed `Status: Active` but HTTPS connections failed.
+
+**Root Cause:** The HTTPS target proxy takes 5-10 minutes to attach the newly active cert and start serving TLS traffic. This is a GCP propagation delay, not a configuration issue.
+
+**Fix:** Waited 10 minutes. HTTPS started working automatically.
+
+**Lesson:** After a ManagedCertificate becomes `Active`, allow 5-10 minutes for the HTTPS proxy to start serving. Don't panic if HTTPS fails immediately after cert activation.
+
+---
+
+### SSL/Ingress Provisioning Timeline
+
+| Time | Event |
+|:---|:---|
+| T+0 min | Ingress created, no address |
+| T+8 min | `kubernetes.io/ingress.class` annotation added, controller starts syncing |
+| T+10 min | Address `34.160.35.205` assigned |
+| T+12 min | Backend services show `HEALTHY` |
+| T+15 min | HTTP traffic working |
+| T+30 min | `api.omerops.com` and `sarraf.omerops.com` cert `Active` |
+| T+45 min | `omerops.com` cert `Active` |
+| T+55 min | HTTPS fully operational on all domains |
+
+### Key Lessons
+
+27. **GKE HTTP Load Balancing add-on must be explicitly enabled** — don't assume Autopilot has it on.
+28. **GKE Ingress uses annotations, not `ingressClassName`** — the Kubernetes deprecation warning is misleading for GKE.
+29. **Don't mix `LoadBalancer` services with Ingress** — use `ClusterIP` for Ingress backends.
+30. **Create ManagedCertificate after Ingress has an address** — otherwise cert verification fails.
+31. **Keep HTTP enabled until SSL cert is Active** — disabling both HTTP and HTTPS makes the ingress unservable.
+32. **HTTPS needs 5-10 min after cert activation** — GCP propagation delay for the HTTPS proxy to attach the cert.
+33. **Static IP via Terraform** (`google_compute_global_address`) ensures DNS records survive ingress recreation.
