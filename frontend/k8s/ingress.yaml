@@ -13,13 +13,26 @@ spec:
   - host: sarraf.omerops.com
     http:
       paths:
-      - path: /api/*
+      - path: /*
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: sarraf-frontend-service
+            port:
+              number: 80
+  - host: api.omerops.com
+    http:
+      paths:
+      - path: /*
         pathType: ImplementationSpecific
         backend:
           service:
             name: sarraf-backend-service
             port:
               number: 80
+  - host: omerops.com
+    http:
+      paths:
       - path: /*
         pathType: ImplementationSpecific
         backend:
