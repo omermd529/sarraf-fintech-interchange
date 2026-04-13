@@ -9,6 +9,13 @@ resource "google_container_cluster" "primary" {
   
   enable_autopilot = true
 
+  # Enable HTTP Load Balancing for GKE Ingress
+  addons_config {
+    http_load_balancing {
+      disabled = false
+    }
+  }
+
   # Fixes the "Error 400" by explicitly maintaining this state
   secret_manager_config {
     enabled = true

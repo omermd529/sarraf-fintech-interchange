@@ -6,9 +6,9 @@ metadata:
   annotations:
     kubernetes.io/ingress.global-static-ip-name: "sarraf-static-ip"
     networking.gke.io/managed-certificates: "sarraf-ssl-cert"
-    kubernetes.io/ingress.class: "gce"
     kubernetes.io/ingress.allow-http: "false"
 spec:
+  ingressClassName: "gce"
   rules:
   - host: sarraf.omerops.com
     http:
