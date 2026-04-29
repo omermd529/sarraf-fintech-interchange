@@ -1,4 +1,4 @@
-name: Backend Dev Deploy
+name: Backend CI
 
 on:
     push:
@@ -6,6 +6,7 @@ on:
         paths:
             - 'backend/**'
             - '.github/workflows/backend-dev.yml'
+            - '!gitops/**'
 
 env:
     PROJECT_ID: omerops-sarraf-dev
@@ -15,11 +16,11 @@ env:
     CLUSTER_NAME: sarraf-cluster-dev
 
 jobs:
-    build-and-deploy:
-        name: Build, Scan, and Deploy to GKE
+    build-scan-push:
+        name: Build, Scan, and Push Image
         runs-on: ubuntu-latest
         permissions:
-            contents: read
+            contents: write
             id-token: write
 
         steps:
@@ -44,9 +45,8 @@ jobs:
             - name: Configure Docker for artifact registry
               run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
 
-            - name: Build Local Docker Image
-              run: |
-                  docker build -t sarraf-api:${{ github.sha }} ./backend
+            - name: Build Docker Image
+              run: docker build -t sarraf-api:${{ github.sha }} ./backend
 
             - name: Run Trivy vulnerability scanner
               uses: aquasecurity/trivy-action@master
@@ -58,28 +58,23 @@ jobs:
                   vuln-type: 'os,library'
                   severity: 'CRITICAL,HIGH'
 
-            # --- SMART PUSH: Skips if tag exists to avoid Immutability Error ---
             - name: Check and Push Docker Image
               run: |
                   REMOTE_TAG="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
-                  
-                  # Use gcloud to check if the specific tag already exists in the registry
                   if gcloud artifacts docker images describe "$REMOTE_TAG" > /dev/null 2>&1; then
-                    echo "Tag ${{ github.sha }} already exists. Skipping push to respect Immutability."
+                    echo "Tag ${{ github.sha }} already exists. Skipping push."
                   else
-                    echo "Tag not found. Pushing new image..."
                     docker tag sarraf-api:${{ github.sha }} "$REMOTE_TAG"
                     docker push "$REMOTE_TAG"
                   fi
 
+            # --- Database Migrations (still needs cluster access) ---
             - name: Fetch Terraform Outputs
               id: tf_outputs
               run: |
                 cd terraform/environments/dev
                 terraform init
                 echo "DB_IP=$(terraform output -raw database_ip)" >> $GITHUB_OUTPUT
-                echo "DB_CONN_NAME=$(terraform output -raw database_connection_name)" >> $GITHUB_OUTPUT
-                echo "GSA_EMAIL=$(terraform output -raw backend_gsa_email)" >> $GITHUB_OUTPUT
 
             - name: Get GKE Credentials
               uses: google-github-actions/get-gke-credentials@v2
@@ -91,43 +86,27 @@ jobs:
               run: |
                 NAMESPACE="sarraf-dev"
                 DB_PRIVATE_IP="${{ steps.tf_outputs.outputs.DB_IP }}"
-                
-                # Update the migrations ConfigMap
                 kubectl create configmap sarraf-migrations-cm \
                   --from-file=backend/migrations/ \
                   -n $NAMESPACE \
                   --dry-run=client -o yaml | kubectl apply -f -
-                
-                # Inject placeholders
-                sed -i "s|DATABASE_IP_PLACEHOLDER|$DB_PRIVATE_IP|g" backend/k8s/migration-job.yaml
-                
-                # Cleanup old job
+                sed -i "s|10.20.0.3|$DB_PRIVATE_IP|g" backend/k8s/migration-job.yaml
                 kubectl delete job sarraf-db-migrate -n $NAMESPACE --ignore-not-found=true
-                
-                # Deploy the Job
                 kubectl apply -f backend/k8s/migration-job.yaml
-                
-                # Wait for the result
                 kubectl wait --for=condition=complete job/sarraf-db-migrate -n $NAMESPACE --timeout=180s
 
-            - name: Deploy to GKE
+            # --- GitOps: Update image tag → ArgoCD auto-syncs ---
+            - name: Update GitOps image tag
               run: |
-                IMAGE_FULL_PATH="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
-                DB_CONN_NAME="${{ steps.tf_outputs.outputs.DB_CONN_NAME }}"
-                GSA_EMAIL="${{ steps.tf_outputs.outputs.GSA_EMAIL }}"
-                NAMESPACE="sarraf-dev"
-                
-                # Injection
-                sed -i "s|IMAGE_PLACEHOLDER|$IMAGE_FULL_PATH|g" backend/k8s/deployment.yaml
-                sed -i "s|DB_CONNECTION_NAME_PLACEHOLDER|$DB_CONN_NAME|g" backend/k8s/deployment.yaml
-                sed -i "s|GSA_EMAIL_PLACEHOLDER|$GSA_EMAIL|g" backend/k8s/deployment.yaml
-                sed -i "s|NAMESPACE_PLACEHOLDER|$NAMESPACE|g" backend/k8s/deployment.yaml
-                sed -i "s|NAMESPACE_PLACEHOLDER|$NAMESPACE|g" backend/k8s/service.yaml
-                sed -i "s|NAMESPACE_PLACEHOLDER|$NAMESPACE|g" backend/k8s/secret-provider.yaml
-                sed -i "s|NAMESPACE_PLACEHOLDER|$NAMESPACE|g" backend/k8s/namespace.yaml
-                sed -i "s|NAMESPACE_PLACEHOLDER|$NAMESPACE|g" backend/k8s/serviceaccount.yaml
-                
-                # Create namespace first, then apply all resources
-                kubectl apply -f backend/k8s/namespace.yaml
-                kubectl apply -f backend/k8s/
-                kubectl rollout status deployment/sarraf-backend -n $NAMESPACE --timeout=300s
+                cd gitops/overlays/gke-dev
+                sed -i "s|newTag:.*|newTag: ${{ github.sha }}|g" kustomization.yaml
+                # Only update the sarraf-api image tag
+                sed -i '/name: sarraf-api/{n;s|newName:.*|newName: '"${{ env.REGION }}"'-docker.pkg.dev/'"${{ env.PROJECT_ID }}"'/'"${{ env.REPO_NAME }}"'/'"${{ env.IMAGE_NAME }}"'|;}' kustomization.yaml
+
+            - name: Commit and Push GitOps update
+              run: |
+                git config user.name "github-actions[bot]"
+                git config user.email "github-actions[bot]@users.noreply.github.com"
+                git add gitops/overlays/gke-dev/kustomization.yaml
+                git diff --cached --quiet || git commit -m "ci: update sarraf-api image to ${{ github.sha }}"
+                git push

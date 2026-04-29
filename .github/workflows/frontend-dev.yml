@@ -1,4 +1,4 @@
-name: Frontend Dev Deploy
+name: Frontend CI
 
 on:
     push:
@@ -6,20 +6,20 @@ on:
         paths:
             - 'frontend/**'
             - '.github/workflows/frontend-dev.yml'
+            - '!gitops/**'
 
 env:
     PROJECT_ID: omerops-sarraf-dev
     REGION: me-central1
     REPO_NAME: sarraf-docker-repo
     IMAGE_NAME: sarraf-frontend
-    CLUSTER_NAME: sarraf-cluster-dev
 
 jobs:
-    build-and-deploy:
-        name: Build, Scan, and Deploy Frontend to GKE
+    build-scan-push:
+        name: Build, Scan, and Push Image
         runs-on: ubuntu-latest
         permissions:
-            contents: read
+            contents: write
             id-token: write
 
         steps:
@@ -39,7 +39,7 @@ jobs:
             - name: Configure Docker for artifact registry
               run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
 
-            - name: Build Local Docker Image
+            - name: Build Docker Image
               run: |
                   docker build \
                     --build-arg NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_URL }} \
@@ -59,31 +59,24 @@ jobs:
             - name: Check and Push Docker Image
               run: |
                   REMOTE_TAG="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
-                  
                   if gcloud artifacts docker images describe "$REMOTE_TAG" > /dev/null 2>&1; then
-                    echo "Tag ${{ github.sha }} already exists. Skipping push to respect Immutability."
+                    echo "Tag ${{ github.sha }} already exists. Skipping push."
                   else
-                    echo "Tag not found. Pushing new image..."
                     docker tag sarraf-frontend:${{ github.sha }} "$REMOTE_TAG"
                     docker push "$REMOTE_TAG"
                   fi
 
-            - name: Get GKE Credentials
-              uses: google-github-actions/get-gke-credentials@v2
-              with:
-                  cluster_name: ${{ env.CLUSTER_NAME }}
-                  location: ${{ env.REGION }}
-
-            - name: Deploy to GKE
+            # --- GitOps: Update image tag → ArgoCD auto-syncs ---
+            - name: Update GitOps image tag
               run: |
-                IMAGE_FULL_PATH="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
-                NAMESPACE="sarraf-dev"
-                
-                # Injection
-                sed -i "s|IMAGE_PLACEHOLDER|$IMAGE_FULL_PATH|g" frontend/k8s/deployment.yaml
-                sed -i "s|NAMESPACE_PLACEHOLDER|$NAMESPACE|g" frontend/k8s/deployment.yaml
-                sed -i "s|NAMESPACE_PLACEHOLDER|$NAMESPACE|g" frontend/k8s/service.yaml
-                
-                # Deploy
-                kubectl apply -f frontend/k8s/
-                kubectl rollout status deployment/sarraf-frontend -n $NAMESPACE --timeout=300s
+                cd gitops/overlays/gke-dev
+                # Update only the frontend image tag
+                sed -i '/name: sarraf-frontend/{n;n;s|newTag:.*|newTag: '"${{ github.sha }}"'|}' kustomization.yaml
+
+            - name: Commit and Push GitOps update
+              run: |
+                git config user.name "github-actions[bot]"
+                git config user.email "github-actions[bot]@users.noreply.github.com"
+                git add gitops/overlays/gke-dev/kustomization.yaml
+                git diff --cached --quiet || git commit -m "ci: update sarraf-frontend image to ${{ github.sha }}"
+                git push
