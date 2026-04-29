@@ -93,6 +93,11 @@ func main() {
 	// 6. Define HTTP Routes.
 	mux := http.NewServeMux()
 
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("Sarraf API"))
+	})
+
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		err := dbPool.Ping(r.Context())
 		if err != nil {
