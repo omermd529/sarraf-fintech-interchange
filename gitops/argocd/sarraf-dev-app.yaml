@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: sarraf-dev
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/omermd529/sarraf-fintech-interchange.git
+    targetRevision: development
+    path: gitops/overlays/gke-dev
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: sarraf-dev
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sarraf-backend
+  labels:
+    app: sarraf-backend
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 0
+  selector:
+    matchLabels:
+      app: sarraf-backend
+  template:
+    metadata:
+      labels:
+        app: sarraf-backend
+    spec:
+      terminationGracePeriodSeconds: 25
+      serviceAccountName: sarraf-backend-ksa
+      containers:
+      - name: sarraf-api
+        image: sarraf-api:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+        env:
+        - name: DB_HOST
+          value: "localhost"
+        - name: DB_NAME
+          value: "sarraf_interchange"
+        - name: DB_USER
+          value: "PLACEHOLDER"
+        - name: DB_PORT
+          value: "5432"
+        - name: DB_IAM_AUTH
+          value: "true"
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 10
+      - name: cloud-sql-proxy
+        image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.15.2
+        args:
+        - "--auto-iam-authn"
+        - "--private-ip"
+        - "--structured-logs"
+        - "PLACEHOLDER"
+        securityContext:
+          runAsNonRoot: true
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"

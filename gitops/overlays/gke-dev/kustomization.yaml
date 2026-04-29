@@ -1,0 +1,40 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: sarraf-dev
+
+resources:
+  - ../../base/backend
+  - ../../base/frontend
+  - namespace.yaml
+
+patches:
+  # Backend: GKE-specific service account annotation
+  - target:
+      kind: ServiceAccount
+      name: sarraf-backend-ksa
+    patch: |
+      - op: add
+        path: /metadata/annotations
+        value:
+          iam.gke.io/gcp-service-account: sarraf-backend-gsa@omerops-sarraf-dev.iam.gserviceaccount.com
+
+  # Backend: Set DB_USER and Cloud SQL connection name
+  - target:
+      kind: Deployment
+      name: sarraf-backend
+    patch: |
+      - op: replace
+        path: /spec/template/spec/containers/0/env/2/value
+        value: sarraf-backend-gsa@omerops-sarraf-dev.iam
+      - op: replace
+        path: /spec/template/spec/containers/1/args/3
+        value: omerops-sarraf-dev:me-central1:sarraf-db-dev
+
+images:
+  - name: sarraf-api
+    newName: me-central1-docker.pkg.dev/omerops-sarraf-dev/sarraf-docker-repo/sarraf-api
+    newTag: latest
+  - name: sarraf-frontend
+    newName: me-central1-docker.pkg.dev/omerops-sarraf-dev/sarraf-docker-repo/sarraf-frontend
+    newTag: latest
