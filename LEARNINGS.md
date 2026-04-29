@@ -928,3 +928,210 @@ ManagedCertificate showed `Status: Active` but HTTPS connections failed.
 31. **Keep HTTP enabled until SSL cert is Active** — disabling both HTTP and HTTPS makes the ingress unservable.
 32. **HTTPS needs 5-10 min after cert activation** — GCP propagation delay for the HTTPS proxy to attach the cert.
 33. **Static IP via Terraform** (`google_compute_global_address`) ensures DNS records survive ingress recreation.
+
+
+---
+
+## 🏆 Milestone: Ingress → Gateway API Migration
+
+**Date:** April 2025
+
+Successfully migrated from the deprecated GKE Ingress to the modern **Gateway API** (`gke-l7-global-external-managed`). This is the GKE-recommended networking model for 2026+, replacing the maintenance-mode Ingress controller.
+
+### Why Migrate?
+
+- GKE Ingress is officially in **maintenance mode** — no new features, only bug fixes
+- Gateway API supports **HTTPRoute filtering** (header transforms, request redirects) natively
+- Cleaner separation of concerns: Gateway (infra team) vs HTTPRoute (app team)
+- Certificate Manager integration instead of the limited `ManagedCertificate` resource
+- Better multi-team governance with `allowedRoutes` and namespace isolation
+
+### Architecture Change
+
+| Component | Before (Ingress) | After (Gateway API) |
+|:---|:---|:---|
+| Entry Point | `ingress.yaml` | `gateway.yaml` |
+| Routing | Ingress `rules` with `paths` | `http-routes.yaml` (HTTPRoute resources) |
+| SSL | `ManagedCertificate` K8s resource | Certificate Manager (`gcloud certificate-manager`) |
+| Ingress Class | `kubernetes.io/ingress.class: gce` annotation | `gatewayClassName: gke-l7-global-external-managed` |
+| HTTP→HTTPS | `networking.gke.io/https-redirect` annotation | HTTPRoute with `RequestRedirect` filter |
+| Static IP | `kubernetes.io/ingress.global-static-ip-name` annotation | `spec.addresses[].type: NamedAddress` |
+
+### Files Created
+
+| File | Purpose |
+|:---|:---|
+| `frontend/k8s/gateway.yaml` | Gateway resource with HTTPS + HTTP listeners, static IP, cert map |
+| `frontend/k8s/http-routes.yaml` | 3 HTTPRoutes: frontend, backend, HTTP→HTTPS redirect |
+
+### Files Removed
+
+| File | Reason |
+|:---|:---|
+| `frontend/k8s/ingress.yaml` | Replaced by `gateway.yaml` + `http-routes.yaml` |
+| `frontend/k8s/managed-cert.yaml` | Replaced by Certificate Manager cert map |
+
+### Certificate Manager Setup
+
+Gateway API uses **Certificate Manager** instead of `ManagedCertificate`. Required enabling the API and creating a cert map:
+
+```bash
+# Enable the API
+gcloud services enable certificatemanager.googleapis.com
+
+# Create the certificate (covers all 3 domains)
+gcloud certificate-manager certificates create sarraf-cert \
+  --domains="sarraf.omerops.com,api.omerops.com,omerops.com"
+
+# Create a cert map and entries for each domain
+gcloud certificate-manager maps create sarraf-cert-map
+gcloud certificate-manager maps entries create sarraf-cert-entry \
+  --map=sarraf-cert-map --certificates=sarraf-cert --hostname="sarraf.omerops.com"
+gcloud certificate-manager maps entries create api-cert-entry \
+  --map=sarraf-cert-map --certificates=sarraf-cert --hostname="api.omerops.com"
+gcloud certificate-manager maps entries create root-cert-entry \
+  --map=sarraf-cert-map --certificates=sarraf-cert --hostname="omerops.com"
+```
+
+The Gateway references the cert map via annotation:
+```yaml
+annotations:
+  networking.gke.io/certmap: sarraf-cert-map
+```
+
+---
+
+### Issues Faced During Migration
+
+#### Issue 23: Static IP Conflict — In-Use by Old Ingress
+
+**Symptom:**
+```
+error ensuring load balancer: Invalid value for field 'resource.IPAddress':
+'global/addresses/sarraf-static-ip'. Specified IP address is in-use and would result in a conflict.
+```
+
+**Root Cause:** The old Ingress was still using the static IP (`34.160.35.205`). The Gateway controller couldn't create its own forwarding rules on the same IP.
+
+**Fix:** Deleted the old Ingress first to release the IP:
+```bash
+kubectl delete ingress sarraf-ingress -n sarraf-dev
+```
+The Gateway controller retried automatically and picked up the freed IP within 2 minutes.
+
+**Lesson:** Delete the old Ingress **before** or **immediately after** creating the Gateway. They cannot share the same static IP simultaneously.
+
+---
+
+#### Issue 24: HTTPS Listener Requires certificateRefs or options
+
+**Symptom:**
+```
+The Gateway "sarraf-gateway" is invalid: spec.listeners[0].tls: Invalid value: "object":
+no such key: certificateRefs evaluating rule: certificateRefs or options must be specified when mode is Terminate
+```
+
+**Root Cause:** The HTTPS listener had `tls.mode: Terminate` but no `certificateRefs` or `options` field. Even when using a cert map via annotation, the listener schema requires one of these fields.
+
+**Fix:** Added `tls.options` with a pre-shared-certs key:
+```yaml
+tls:
+  mode: Terminate
+  options:
+    networking.gke.io/pre-shared-certs: ""
+```
+The actual cert is served from the cert map annotation, but the schema validation requires the `options` field to be present.
+
+**Lesson:** Gateway API schema validation is strict. Even when using cert map annotations, the HTTPS listener must have `certificateRefs` or `options` defined.
+
+---
+
+#### Issue 25: HTTPRoute `NoMatchingParent` — Section Name Mismatch
+
+**Symptom:**
+```
+Error GWCER104: HTTPRoute "sarraf-dev/sarraf-frontend-route" is misconfigured,
+err: ParentRef sarraf-gateway does not match any Listener section name
+```
+
+**Root Cause:** The HTTPRoutes referenced `sectionName: https-sarraf`, `https-api`, `https-root` — but the Gateway only had listeners named `https` and `http-redirect`. The section names in the routes must exactly match the listener names in the Gateway.
+
+**Fix:** Updated all HTTPRoutes to reference `sectionName: https` (the single HTTPS listener):
+```yaml
+parentRefs:
+- name: sarraf-gateway
+  sectionName: https  # Must match Gateway listener name
+```
+Host-based routing is handled by the `hostnames` field in each HTTPRoute, not by separate listeners.
+
+**Lesson:** Gateway API uses **one HTTPS listener** with multiple HTTPRoutes differentiated by `hostnames`. Don't create separate listeners per domain — use one listener and let HTTPRoutes handle host matching.
+
+---
+
+#### Issue 26: Backend `UNHEALTHY` — Gateway Health Check Hitting `/`
+
+**Symptom:**
+```
+curl https://api.omerops.com/health
+unconditional drop overload
+```
+Backend service showed `healthState: UNHEALTHY` in GCE.
+
+**Root Cause:** The Gateway API created its own health check hitting `/` on port 8080. The Go backend had no handler for `/` — only `/health` and `/healthz`. The health check got a 404, marking the backend as unhealthy. The `unconditional drop overload` message means the LB is refusing to route traffic to unhealthy backends.
+
+**Fix:** Added a root `/` handler to the Go backend:
+```go
+mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+    w.WriteHeader(http.StatusOK)
+    w.Write([]byte("Sarraf API"))
+})
+```
+
+**Lesson:** Gateway API creates its own health checks that may not match your pod's readiness probe path. Always ensure your backend responds with 200 on `/` (the default health check path) or configure a custom health check policy.
+
+---
+
+#### Issue 27: Certificate Manager Cert `PROVISIONING` Delay
+
+**Symptom:**
+```
+gcloud certificate-manager certificates describe sarraf-cert --format="get(managed.state)"
+PROVISIONING
+```
+HTTPS connections failed with `SSL_ERROR_SYSCALL` even though the Gateway was `Programmed: True`.
+
+**Root Cause:** Certificate Manager certs take 15-30 minutes to provision, similar to `ManagedCertificate`. The cert must verify domain ownership via DNS before becoming `ACTIVE`.
+
+**Fix:** Waited ~20 minutes. Monitored with:
+```bash
+gcloud certificate-manager certificates describe sarraf-cert \
+  --project=omerops-sarraf-dev --format="get(managed.state)"
+```
+Once it returned `ACTIVE`, HTTPS started working.
+
+**Lesson:** Certificate Manager provisioning time is the same as `ManagedCertificate` (~15-30 min). Plan for this during migrations — there will be a brief HTTPS downtime window.
+
+---
+
+### Migration Sequence (What Worked)
+
+| Step | Action | Duration |
+|:---|:---|:---|
+| 1 | Enable Certificate Manager API | 2 min |
+| 2 | Create cert + cert map + entries | 3 min |
+| 3 | Apply Gateway + HTTPRoutes | 1 min |
+| 4 | Delete old Ingress (release static IP) | 30 sec |
+| 5 | Gateway picks up static IP | 2 min |
+| 6 | Fix HTTPRoute section names | 1 min |
+| 7 | Wait for cert to become ACTIVE | ~20 min |
+| 8 | Fix backend health check (add `/` handler) | 5 min (rebuild + deploy) |
+| 9 | Full HTTPS operational | ✅ |
+
+### Key Lessons
+
+34. **Delete old Ingress before creating Gateway** when sharing a static IP — they can't coexist on the same address.
+35. **Gateway HTTPS listeners require `certificateRefs` or `options`** even when using cert map annotations — schema validation is strict.
+36. **Use one HTTPS listener with multiple HTTPRoutes** — don't create per-domain listeners. Host matching is done via `hostnames` in HTTPRoute.
+37. **Gateway API creates its own health checks** that default to `/` — ensure your backend responds 200 on the root path.
+38. **Certificate Manager provisioning takes 15-30 min** — same as ManagedCertificate. Plan for HTTPS downtime during migration.
+39. **Gateway API is the future of GKE networking** — Ingress is in maintenance mode. The migration is worth the effort for governance, filtering, and multi-team support.
