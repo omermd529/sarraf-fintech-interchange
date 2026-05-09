@@ -1335,3 +1335,171 @@ gitops/
 44. **CI bot commits cause rebase conflicts** — use `git pull --rebase` or separate branches for GitOps updates.
 45. **ArgoCD ApplicationSet controller is optional** — core functionality works without it.
 46. **GitOps separates CI from CD** — CI builds and pushes images, ArgoCD handles deployment. No `kubectl` in pipelines.
+
+
+---
+
+## 🏆 Milestone: Observability Stack — Prometheus + Grafana
+
+**Date:** May 2025
+
+Successfully deployed a full observability stack with custom Prometheus metrics, in-cluster Prometheus scraping, and Grafana dashboards provisioned via code (ConfigMaps). All dashboards persist across pod restarts.
+
+### Architecture
+
+```
+Go Backend (/metrics)
+        │ scraped every 15s
+        ▼
+Prometheus (in-cluster)
+        │ queried by
+        ▼
+Grafana (grafana.omerops.com)
+        │ dashboards from
+        ▼
+ConfigMaps (GitOps-managed)
+```
+
+### Custom Metrics Instrumented
+
+| Metric | Type | Purpose |
+|:---|:---|:---|
+| `sarraf_transactions_total` | Counter (by status) | Payment success/failure rate |
+| `sarraf_payment_latency_seconds` | Histogram | Payment processing time percentiles |
+| `sarraf_fee_collected_sar_total` | Counter | Revenue tracking in SAR |
+| `sarraf_http_requests_total` | Counter (method/path/status) | API traffic breakdown |
+| `sarraf_http_request_duration_seconds` | Histogram | Per-endpoint latency |
+| `sarraf_active_requests` | Gauge | Concurrent payment processing |
+
+### Dashboards (Code-Provisioned)
+
+**Dashboard 1: Sarraf Interchange - Overview**
+- Transaction rate (success vs failed)
+- Payment latency (p50/p95/p99)
+- Total fees collected (SAR)
+- Total transactions count
+- Active requests gauge
+- Backend uptime
+- HTTP requests by endpoint
+- Request duration by endpoint
+
+**Dashboard 2: Sarraf - Pod Health & Performance**
+- CPU usage %
+- Memory breakdown (allocated/system/heap in-use)
+- Goroutines count
+- Open file descriptors vs max
+- GC pause duration
+- Uptime, threads, heap objects stats
+- HTTP error rate (4xx/5xx vs 2xx)
+- Request latency heatmap (p50/p90/p99)
+
+### Key Pod KPIs Monitored
+
+| KPI | What it tells you | Alert threshold |
+|:---|:---|:---|
+| CPU % | Pod under load | > 80% sustained |
+| Heap In-Use | Memory leak detection | Continuously growing |
+| Goroutines | Concurrency / goroutine leaks | > 1000 |
+| GC Pause | Stop-the-world latency impact | > 100ms |
+| Open FDs | Connection/resource exhaustion | Approaching max |
+| Error Rate | Service reliability | > 1% of requests |
+| p99 Latency | Worst-case user experience | > 2s |
+
+---
+
+### Issues Faced During Observability Setup
+
+#### Issue 32: Prometheus Can't Discover Pods — RBAC Forbidden
+
+**Symptom:**
+```
+pods is forbidden: User "system:serviceaccount:sarraf-dev:sarraf-backend-ksa"
+cannot list resource "pods" in API group "" in the namespace "sarraf-dev"
+```
+Prometheus showed 0 targets — no metrics scraped.
+
+**Root Cause:** Prometheus was using `sarraf-backend-ksa` service account which only has GCP IAM permissions (for Cloud SQL). It doesn't have Kubernetes RBAC to list pods, which Prometheus needs for `kubernetes_sd_configs` pod discovery.
+
+**Fix:** Created a dedicated `prometheus-sa` ServiceAccount with a Role and RoleBinding:
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: prometheus-role
+  namespace: sarraf-dev
+rules:
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list", "watch"]
+```
+
+**Lesson:** Prometheus pod discovery requires explicit RBAC. Don't reuse application service accounts — create a dedicated one with minimal permissions.
+
+---
+
+#### Issue 33: GMP Frontend Not Available on Autopilot
+
+**Symptom:**
+```
+kubectl get svc -n gmp-system
+No resources found in gmp-system namespace.
+```
+Grafana couldn't query Google Managed Prometheus because there was no queryable endpoint.
+
+**Root Cause:** GKE Autopilot collects metrics via GMP but doesn't expose a Prometheus-compatible query frontend by default. The `gmp-system` namespace exists on Standard clusters but not Autopilot.
+
+**Fix:** Deployed an in-cluster Prometheus instance (`prom/prometheus:v2.53.0`) that scrapes the backend directly. This gives Grafana a standard Prometheus datasource without depending on GMP's query API.
+
+**Lesson:** On GKE Autopilot, deploy your own Prometheus for Grafana queries. GMP is great for Google Cloud Monitoring integration but doesn't provide an in-cluster query endpoint out of the box.
+
+---
+
+#### Issue 34: Grafana Dashboards Not Persisting
+
+**Symptom:** Dashboards created manually in Grafana UI disappeared after pod restart.
+
+**Root Cause:** Grafana stores dashboards in its internal SQLite database at `/var/lib/grafana/grafana.db`. When the pod restarts, the ephemeral storage is lost.
+
+**Fix:** Provisioned dashboards via ConfigMaps mounted into Grafana:
+```yaml
+volumes:
+- name: grafana-dashboard-provider
+  configMap:
+    name: grafana-dashboard-provider    # Tells Grafana where to find dashboards
+- name: sarraf-dashboard
+  configMap:
+    name: sarraf-dashboard              # The actual dashboard JSON
+```
+
+Dashboard provider config tells Grafana to load JSON files from mounted paths on startup. Dashboards are now GitOps-managed — changes in Git → ArgoCD syncs → Grafana restarts → new dashboards appear.
+
+**To force Grafana to reload dashboards:**
+```bash
+kubectl rollout restart deployment grafana -n sarraf-dev
+```
+
+**Lesson:** Never create Grafana dashboards manually in production. Always provision via ConfigMaps or a persistent volume. ConfigMaps + GitOps is the preferred pattern — dashboards are version-controlled and reproducible.
+
+---
+
+### Observability File Structure
+
+```
+gitops/base/monitoring/
+├── kustomization.yaml
+├── pod-monitoring.yaml          ← GMP PodMonitoring (scrapes for Google Cloud Monitoring)
+├── prometheus.yaml              ← In-cluster Prometheus + RBAC
+├── grafana.yaml                 ← Grafana deployment + datasource ConfigMap
+├── grafana-route.yaml           ← HTTPRoute for grafana.omerops.com
+└── dashboards/
+    ├── sarraf-dashboard.yaml    ← Overview dashboard + provider config
+    └── pods-dashboard.yaml      ← Pod health & performance dashboard
+```
+
+### Key Lessons
+
+47. **Prometheus needs dedicated RBAC** for pod discovery — don't reuse application service accounts.
+48. **GKE Autopilot doesn't expose GMP query frontend** — deploy your own Prometheus for Grafana.
+49. **Provision Grafana dashboards via ConfigMaps** — never create manually. Use `kubectl rollout restart` to reload.
+50. **Metrics middleware captures all HTTP traffic** — wrap your mux handler to get per-endpoint latency and error rates for free.
+51. **Separate business metrics from infrastructure metrics** — `sarraf_transactions_total` (business) vs `go_goroutines` (infra) serve different audiences.
