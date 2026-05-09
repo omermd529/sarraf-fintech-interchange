@@ -1135,3 +1135,203 @@ Once it returned `ACTIVE`, HTTPS started working.
 37. **Gateway API creates its own health checks** that default to `/` — ensure your backend responds 200 on the root path.
 38. **Certificate Manager provisioning takes 15-30 min** — same as ManagedCertificate. Plan for HTTPS downtime during migration.
 39. **Gateway API is the future of GKE networking** — Ingress is in maintenance mode. The migration is worth the effort for governance, filtering, and multi-team support.
+
+
+---
+
+## 🏆 Milestone: GitOps with ArgoCD — Continuous Deployment
+
+**Date:** May 2025
+
+Successfully implemented GitOps using ArgoCD with Kustomize overlays. The deployment model shifted from "CI pushes to cluster" to "ArgoCD pulls from Git" — the industry standard for platform engineering.
+
+### New Deployment Flow
+
+```
+Developer pushes code
+        │
+        ▼
+GitHub Actions (CI only)
+├── Build Docker image
+├── Trivy vulnerability scan
+├── Push to Artifact Registry
+├── Run DB migrations (backend only)
+└── Update image tag in gitops/overlays/gke-dev/kustomization.yaml
+        │
+        ▼ (git commit by bot)
+ArgoCD detects change (3-min sync interval)
+├── Pulls new kustomization.yaml
+├── Renders manifests with Kustomize
+├── Compares desired state vs live state
+└── Auto-syncs to GKE (self-heal enabled)
+```
+
+### What Was Built
+
+| Component | File/Location | Purpose |
+|:---|:---|:---|
+| Base Backend | `gitops/base/backend/` | Shared deployment, service, serviceaccount |
+| Base Frontend | `gitops/base/frontend/` | Shared deployment, service |
+| Base Monitoring | `gitops/base/monitoring/` | PodMonitoring, Grafana, Grafana HTTPRoute |
+| GKE Dev Overlay | `gitops/overlays/gke-dev/` | Namespace, IAM annotations, image tags, Cloud SQL config |
+| EKS DR Overlay | `gitops/overlays/eks-dr/` | Placeholder for Phase 4 disaster recovery |
+| ArgoCD App | `gitops/argocd/sarraf-dev-app.yaml` | Application manifest with auto-sync + self-heal |
+
+### ArgoCD Configuration
+
+```yaml
+syncPolicy:
+  automated:
+    prune: true      # Removes resources deleted from Git
+    selfHeal: true   # Reverts manual cluster changes
+  syncOptions:
+    - CreateNamespace=true
+```
+
+- **Auto-sync:** ArgoCD deploys automatically when Git changes
+- **Self-heal:** If someone manually edits a resource in the cluster, ArgoCD reverts it within 3 minutes
+- **Prune:** If a resource is removed from Git, ArgoCD deletes it from the cluster
+
+### Observability Stack Added
+
+| Metric | Type | Purpose |
+|:---|:---|:---|
+| `sarraf_transactions_total` | Counter (by status) | Payment success/failure rate |
+| `sarraf_payment_latency_seconds` | Histogram | Payment processing time |
+| `sarraf_fee_collected_sar_total` | Counter | Revenue tracking |
+| `sarraf_http_requests_total` | Counter (method/path/status) | API traffic by endpoint |
+| `sarraf_http_request_duration_seconds` | Histogram | Request latency per endpoint |
+| `sarraf_active_requests` | Gauge | Concurrent payment processing |
+
+- **PodMonitoring** scrapes `/metrics` every 30s via Google Managed Prometheus
+- **Grafana** deployed in-cluster with GMP datasource
+- **Grafana HTTPRoute** at `grafana.omerops.com`
+
+---
+
+### Issues Faced During ArgoCD Setup
+
+#### Issue 28: `latest` Image Tag — CrashLoopBackOff
+
+**Symptom:**
+```
+sarraf-backend-8dd8bd7fd-kj8p5   CrashLoopBackOff
+```
+
+**Root Cause:** The initial kustomization used `newTag: latest`. The `latest` tag in Artifact Registry pointed to an old/stale image that didn't have the root `/` handler, causing the Gateway health check to fail and the pod to crash.
+
+**Fix:** Pinned image tags to specific Git SHAs:
+```yaml
+images:
+  - name: sarraf-api
+    newTag: "5d1aa1d3391b023076ea265d0ab73ed39f76f86e"
+  - name: sarraf-frontend
+    newTag: "b803a2bae3e5ed252650ed2f9d95cdaab42a195c"
+```
+
+**Lesson:** Never use `latest` in GitOps. Always pin to immutable tags (Git SHAs). The CI pipeline updates these tags automatically on each build.
+
+---
+
+#### Issue 29: CI Bot Overwrites All Image Tags — Greedy `sed`
+
+**Symptom:**
+```
+sarraf-frontend-5446c5f6f8-hv4zl   ImagePullBackOff
+Pulling image "sarraf-frontend:655c33c..." (backend commit SHA, not frontend)
+```
+
+**Root Cause:** The backend CI pipeline used `sed -i "s|newTag:.*|newTag: $SHA|g"` which replaced ALL `newTag` lines in the kustomization — including the frontend's tag. The frontend then tried to pull an image tagged with the backend's commit SHA, which didn't exist.
+
+**Fix:** Changed both CI pipelines to target only their specific image block:
+```bash
+# Backend CI — only updates sarraf-api tag
+sed -i '/name: sarraf-api/{n;n;s|newTag:.*|newTag: "'"$SHA"'"|}' kustomization.yaml
+
+# Frontend CI — only updates sarraf-frontend tag
+sed -i '/name: sarraf-frontend/{n;n;s|newTag:.*|newTag: "'"$SHA"'"|}' kustomization.yaml
+```
+
+**Lesson:** In GitOps with multiple images in one kustomization, each CI pipeline must surgically update only its own image tag. Greedy regex replacements cause cross-contamination.
+
+---
+
+#### Issue 30: Git Rebase Conflict — CI Bot vs Developer
+
+**Symptom:**
+```
+! [rejected] development -> development (non-fast-forward)
+CONFLICT (content): Merge conflict in gitops/overlays/gke-dev/kustomization.yaml
+```
+
+**Root Cause:** The CI bot pushed a commit updating the image tag at the same time the developer was pushing a fix. Both modified the same file (`kustomization.yaml`).
+
+**Fix:** `git pull --rebase origin development`, resolved the conflict, then `git rebase --continue`.
+
+**Lesson:** When CI bots commit to the same branch as developers, conflicts are inevitable. Solutions:
+1. Use a separate branch for GitOps updates (e.g., `gitops-updates`)
+2. Use `git pull --rebase` before pushing
+3. Accept that occasional conflicts are normal in this model
+
+---
+
+#### Issue 31: ArgoCD ApplicationSet Controller Error
+
+**Symptom:**
+```
+argocd-applicationset-controller-649dc6c7d-r6tq5   0/1   Error
+```
+
+**Root Cause:** The ApplicationSet controller is for advanced multi-cluster templating. On GKE Autopilot, it sometimes fails due to resource constraints during initial startup.
+
+**Fix:** Ignored it — the core ArgoCD functionality (Application controller, Repo server, Server) works without it. The ApplicationSet controller is only needed for generating multiple Applications from templates.
+
+**Lesson:** Not all ArgoCD components are required. The essential ones are: `argocd-server`, `argocd-application-controller`, `argocd-repo-server`, `argocd-redis`. The `applicationset-controller` and `notifications-controller` are optional.
+
+---
+
+### Kustomize Overlay Pattern
+
+```
+gitops/
+├── base/                          ← Shared, environment-agnostic
+│   ├── backend/
+│   │   ├── deployment.yaml        ← Generic deployment (placeholder values)
+│   │   ├── service.yaml           ← ClusterIP service
+│   │   ├── serviceaccount.yaml    ← Bare KSA (no annotations)
+│   │   └── kustomization.yaml
+│   ├── frontend/
+│   │   ├── deployment.yaml
+│   │   ├── service.yaml
+│   │   └── kustomization.yaml
+│   └── monitoring/
+│       ├── pod-monitoring.yaml
+│       ├── grafana.yaml
+│       ├── grafana-route.yaml
+│       └── kustomization.yaml
+├── overlays/
+│   ├── gke-dev/                   ← GKE-specific: namespace, IAM, images, Cloud SQL
+│   │   ├── kustomization.yaml    ← Patches + image overrides
+│   │   └── namespace.yaml
+│   └── eks-dr/                    ← Phase 4: AWS EKS disaster recovery
+└── argocd/
+    └── sarraf-dev-app.yaml        ← ArgoCD Application manifest
+```
+
+**Why this pattern:**
+- **Base** is reusable across GKE, EKS, or any Kubernetes cluster
+- **Overlays** inject environment-specific config (IAM, images, secrets)
+- **ArgoCD** watches the overlay path and deploys the rendered output
+- Adding a new environment = new overlay + new ArgoCD Application
+
+---
+
+### Key Lessons
+
+40. **Never use `latest` tag in GitOps** — always pin to immutable Git SHAs. CI updates the tag automatically.
+41. **Each CI pipeline must update only its own image tag** — greedy sed replacements cause cross-service failures.
+42. **ArgoCD self-heal prevents configuration drift** — manual cluster changes are automatically reverted.
+43. **Kustomize overlays enable multi-cluster deployments** — same base manifests, different patches per environment.
+44. **CI bot commits cause rebase conflicts** — use `git pull --rebase` or separate branches for GitOps updates.
+45. **ArgoCD ApplicationSet controller is optional** — core functionality works without it.
+46. **GitOps separates CI from CD** — CI builds and pushes images, ArgoCD handles deployment. No `kubectl` in pipelines.
