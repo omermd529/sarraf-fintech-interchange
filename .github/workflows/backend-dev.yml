@@ -99,9 +99,8 @@ jobs:
             - name: Update GitOps image tag
               run: |
                 cd gitops/overlays/gke-dev
-                sed -i "s|newTag:.*|newTag: ${{ github.sha }}|g" kustomization.yaml
-                # Only update the sarraf-api image tag
-                sed -i '/name: sarraf-api/{n;s|newName:.*|newName: '"${{ env.REGION }}"'-docker.pkg.dev/'"${{ env.PROJECT_ID }}"'/'"${{ env.REPO_NAME }}"'/'"${{ env.IMAGE_NAME }}"'|;}' kustomization.yaml
+                # Update only sarraf-api tag (line after 'name: sarraf-api')
+                sed -i '/name: sarraf-api/{n;n;s|newTag:.*|newTag: "'"${{ github.sha }}"'"|;}' kustomization.yaml
 
             - name: Commit and Push GitOps update
               run: |

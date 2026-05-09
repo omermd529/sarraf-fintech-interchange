@@ -70,8 +70,8 @@ jobs:
             - name: Update GitOps image tag
               run: |
                 cd gitops/overlays/gke-dev
-                # Update only the frontend image tag
-                sed -i '/name: sarraf-frontend/{n;n;s|newTag:.*|newTag: '"${{ github.sha }}"'|}' kustomization.yaml
+                # Update only sarraf-frontend tag (line after 'name: sarraf-frontend')
+                sed -i '/name: sarraf-frontend/{n;n;s|newTag:.*|newTag: "'"${{ github.sha }}"'"|;}' kustomization.yaml
 
             - name: Commit and Push GitOps update
               run: |
