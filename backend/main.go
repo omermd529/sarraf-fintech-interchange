@@ -8,12 +8,15 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/omerops/sarraf-backend/internal/metrics"
 	"github.com/omerops/sarraf-backend/internal/service"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/shopspring/decimal"
 )
 
@@ -98,6 +101,9 @@ func main() {
 		w.Write([]byte("Sarraf API"))
 	})
 
+	// Prometheus metrics endpoint
+	mux.Handle("/metrics", promhttp.Handler())
+
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		err := dbPool.Ping(r.Context())
 		if err != nil {
@@ -143,10 +149,15 @@ func main() {
 
 		rrn, err := transferSvc.ProcessPayment(r.Context(), userID, merchantID, amount)
 		if err != nil {
+			metrics.TransactionsTotal.WithLabelValues("failed").Inc()
 			log.Printf("Payment failed: %v", err)
 			http.Error(w, fmt.Sprintf(`{"error":"%s"}`, err.Error()), http.StatusUnprocessableEntity)
 			return
 		}
+
+		metrics.TransactionsTotal.WithLabelValues("completed").Inc()
+		feeFloat, _ := amount.Mul(decimal.NewFromFloat(0.01)).Float64()
+		metrics.FeeCollected.Add(feeFloat)
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{
@@ -166,7 +177,7 @@ func main() {
 	// 7. Start the Server
 	port := "8080"
 	log.Printf("Sarraf Backend starting on port %s...", port)
-	if err := http.ListenAndServe(":"+port, corsMiddleware(mux)); err != nil {
+	if err := http.ListenAndServe(":"+port, metricsMiddleware(corsMiddleware(mux))); err != nil {
 		log.Fatal(err)
 	}
 }
@@ -181,6 +192,31 @@ func corsMiddleware(next http.Handler) http.Handler {
 			return
 		}
 		next.ServeHTTP(w, r)
+	})
+}
+
+type responseWriter struct {
+	http.ResponseWriter
+	statusCode int
+}
+
+func (rw *responseWriter) WriteHeader(code int) {
+	rw.statusCode = code
+	rw.ResponseWriter.WriteHeader(code)
+}
+
+func metricsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/metrics" {
+			next.ServeHTTP(w, r)
+			return
+		}
+		start := time.Now()
+		rw := &responseWriter{ResponseWriter: w, statusCode: http.StatusOK}
+		next.ServeHTTP(rw, r)
+		duration := time.Since(start).Seconds()
+		metrics.HTTPRequestsTotal.WithLabelValues(r.Method, r.URL.Path, strconv.Itoa(rw.statusCode)).Inc()
+		metrics.HTTPRequestDuration.WithLabelValues(r.Method, r.URL.Path).Observe(duration)
 	})
 }
 

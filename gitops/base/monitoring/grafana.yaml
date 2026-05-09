@@ -1,0 +1,82 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: sarraf-dev
+  labels:
+    app: grafana
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      containers:
+      - name: grafana
+        image: grafana/grafana:11.0.0
+        ports:
+        - containerPort: 3000
+        env:
+        - name: GF_SECURITY_ADMIN_PASSWORD
+          value: "sarraf-admin"
+        - name: GF_AUTH_ANONYMOUS_ENABLED
+          value: "true"
+        - name: GF_AUTH_ANONYMOUS_ORG_ROLE
+          value: "Viewer"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "250m"
+        volumeMounts:
+        - name: grafana-datasources
+          mountPath: /etc/grafana/provisioning/datasources
+      volumes:
+      - name: grafana-datasources
+        configMap:
+          name: grafana-datasources
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana-service
+  namespace: sarraf-dev
+  labels:
+    app: grafana
+spec:
+  selector:
+    app: grafana
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 3000
+  type: ClusterIP
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources
+  namespace: sarraf-dev
+data:
+  datasources.yaml: |
+    apiVersion: 1
+    datasources:
+    - name: Google Managed Prometheus
+      type: prometheus
+      access: proxy
+      url: http://frontend.default.svc:9090
+      isDefault: true
+    - name: Prometheus (GMP)
+      type: prometheus
+      access: proxy
+      url: https://monitoring.googleapis.com/v1/projects/omerops-sarraf-dev/location/global/prometheus
+      isDefault: false
+      jsonData:
+        httpMethod: POST
+        authenticationType: gce

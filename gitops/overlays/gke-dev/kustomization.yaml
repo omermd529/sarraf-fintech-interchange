@@ -6,6 +6,7 @@ namespace: sarraf-dev
 resources:
   - ../../base/backend
   - ../../base/frontend
+  - ../../base/monitoring
   - namespace.yaml
 
 patches:

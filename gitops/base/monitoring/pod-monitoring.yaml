@@ -1,0 +1,13 @@
+apiVersion: monitoring.googleapis.com/v1
+kind: PodMonitoring
+metadata:
+  name: sarraf-backend-metrics
+  namespace: sarraf-dev
+spec:
+  selector:
+    matchLabels:
+      app: sarraf-backend
+  endpoints:
+  - port: 8080
+    path: /metrics
+    interval: 30s
