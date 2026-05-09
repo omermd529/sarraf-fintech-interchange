@@ -5,3 +5,4 @@ resources:
   - prometheus.yaml
   - grafana.yaml
   - grafana-route.yaml
+  - dashboards/sarraf-dashboard.yaml
