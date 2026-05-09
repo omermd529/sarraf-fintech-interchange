@@ -40,7 +40,9 @@ spec:
         - name: grafana-dashboard-provider
           mountPath: /etc/grafana/provisioning/dashboards
         - name: sarraf-dashboard
-          mountPath: /var/lib/grafana/dashboards
+          mountPath: /var/lib/grafana/dashboards/sarraf
+        - name: pods-dashboard
+          mountPath: /var/lib/grafana/dashboards/pods
       volumes:
       - name: grafana-datasources
         configMap:
@@ -51,6 +53,9 @@ spec:
       - name: sarraf-dashboard
         configMap:
           name: sarraf-dashboard
+      - name: pods-dashboard
+        configMap:
+          name: sarraf-pods-dashboard
 ---
 apiVersion: v1
 kind: Service

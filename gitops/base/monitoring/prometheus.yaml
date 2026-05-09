@@ -20,6 +20,21 @@ data:
       - source_labels: [__meta_kubernetes_pod_container_port_number]
         regex: "8080"
         action: keep
+    - job_name: 'sarraf-frontend'
+      kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names: ['sarraf-dev']
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_app]
+        regex: sarraf-frontend
+        action: keep
+      - source_labels: [__meta_kubernetes_pod_container_port_number]
+        regex: "3000"
+        action: keep
+    - job_name: 'kube-state-metrics'
+      static_configs:
+      - targets: ['kube-state-metrics.kube-system.svc:8080']
 ---
 apiVersion: v1
 kind: ServiceAccount

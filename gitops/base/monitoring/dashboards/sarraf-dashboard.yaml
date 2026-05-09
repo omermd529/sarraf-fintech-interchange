@@ -7,14 +7,22 @@ data:
   dashboards.yaml: |
     apiVersion: 1
     providers:
-    - name: 'sarraf'
+    - name: 'sarraf-overview'
       orgId: 1
       folder: 'Sarraf'
       type: file
       disableDeletion: false
       editable: true
       options:
-        path: /var/lib/grafana/dashboards
+        path: /var/lib/grafana/dashboards/sarraf
+    - name: 'sarraf-pods'
+      orgId: 1
+      folder: 'Sarraf'
+      type: file
+      disableDeletion: false
+      editable: true
+      options:
+        path: /var/lib/grafana/dashboards/pods
 ---
 apiVersion: v1
 kind: ConfigMap

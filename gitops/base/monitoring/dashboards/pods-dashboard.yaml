@@ -1,0 +1,210 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sarraf-pods-dashboard
+  namespace: sarraf-dev
+data:
+  sarraf-pods.json: |
+    {
+      "title": "Sarraf - Pod Health & Performance",
+      "uid": "sarraf-pods",
+      "version": 1,
+      "editable": true,
+      "panels": [
+        {
+          "title": "Backend — CPU Usage",
+          "type": "timeseries",
+          "gridPos": {"h": 7, "w": 12, "x": 0, "y": 0},
+          "targets": [
+            {
+              "expr": "rate(process_cpu_seconds_total{job=\"sarraf-backend\"}[5m]) * 100",
+              "legendFormat": "Backend CPU %"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {"unit": "percent", "min": 0, "custom": {"fillOpacity": 20, "lineWidth": 2}}
+          }
+        },
+        {
+          "title": "Backend — Memory Usage",
+          "type": "timeseries",
+          "gridPos": {"h": 7, "w": 12, "x": 12, "y": 0},
+          "targets": [
+            {
+              "expr": "go_memstats_alloc_bytes{job=\"sarraf-backend\"}",
+              "legendFormat": "Allocated"
+            },
+            {
+              "expr": "go_memstats_sys_bytes{job=\"sarraf-backend\"}",
+              "legendFormat": "System"
+            },
+            {
+              "expr": "go_memstats_heap_inuse_bytes{job=\"sarraf-backend\"}",
+              "legendFormat": "Heap In-Use"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {"unit": "bytes", "custom": {"fillOpacity": 15, "lineWidth": 2}}
+          }
+        },
+        {
+          "title": "Backend — Goroutines",
+          "type": "timeseries",
+          "gridPos": {"h": 7, "w": 8, "x": 0, "y": 7},
+          "targets": [
+            {
+              "expr": "go_goroutines{job=\"sarraf-backend\"}",
+              "legendFormat": "Goroutines"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {"custom": {"fillOpacity": 20, "lineWidth": 2}}
+          }
+        },
+        {
+          "title": "Backend — Open File Descriptors",
+          "type": "timeseries",
+          "gridPos": {"h": 7, "w": 8, "x": 8, "y": 7},
+          "targets": [
+            {
+              "expr": "process_open_fds{job=\"sarraf-backend\"}",
+              "legendFormat": "Open FDs"
+            },
+            {
+              "expr": "process_max_fds{job=\"sarraf-backend\"}",
+              "legendFormat": "Max FDs"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {"custom": {"fillOpacity": 10, "lineWidth": 2}}
+          }
+        },
+        {
+          "title": "Backend — GC Pause Duration",
+          "type": "timeseries",
+          "gridPos": {"h": 7, "w": 8, "x": 16, "y": 7},
+          "targets": [
+            {
+              "expr": "rate(go_gc_duration_seconds_sum{job=\"sarraf-backend\"}[5m])",
+              "legendFormat": "GC Time/sec"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {"unit": "s", "custom": {"fillOpacity": 20, "lineWidth": 2}}
+          }
+        },
+        {
+          "title": "Backend — Uptime",
+          "type": "stat",
+          "gridPos": {"h": 4, "w": 6, "x": 0, "y": 14},
+          "targets": [
+            {
+              "expr": "time() - process_start_time_seconds{job=\"sarraf-backend\"}",
+              "legendFormat": "Uptime"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "dtdurations",
+              "color": {"mode": "thresholds"},
+              "thresholds": {"steps": [{"color": "green", "value": null}]}
+            }
+          }
+        },
+        {
+          "title": "Backend — Threads",
+          "type": "stat",
+          "gridPos": {"h": 4, "w": 6, "x": 6, "y": 14},
+          "targets": [
+            {
+              "expr": "go_threads{job=\"sarraf-backend\"}",
+              "legendFormat": "Threads"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "thresholds": {"steps": [{"color": "blue", "value": null}]}
+            }
+          }
+        },
+        {
+          "title": "Backend — Heap Objects",
+          "type": "stat",
+          "gridPos": {"h": 4, "w": 6, "x": 12, "y": 14},
+          "targets": [
+            {
+              "expr": "go_memstats_heap_objects{job=\"sarraf-backend\"}",
+              "legendFormat": "Objects"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "thresholds": {"steps": [{"color": "purple", "value": null}]}
+            }
+          }
+        },
+        {
+          "title": "Backend — GC Cycles",
+          "type": "stat",
+          "gridPos": {"h": 4, "w": 6, "x": 18, "y": 14},
+          "targets": [
+            {
+              "expr": "go_gc_duration_seconds_count{job=\"sarraf-backend\"}",
+              "legendFormat": "Total GCs"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "thresholds": {"steps": [{"color": "orange", "value": null}]}
+            }
+          }
+        },
+        {
+          "title": "HTTP Error Rate (4xx + 5xx)",
+          "type": "timeseries",
+          "gridPos": {"h": 7, "w": 12, "x": 0, "y": 18},
+          "targets": [
+            {
+              "expr": "sum(rate(sarraf_http_requests_total{status_code=~\"4..|5..\"}[5m]))",
+              "legendFormat": "Errors/sec"
+            },
+            {
+              "expr": "sum(rate(sarraf_http_requests_total{status_code=~\"2..\"}[5m]))",
+              "legendFormat": "Success/sec"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {"custom": {"fillOpacity": 20, "lineWidth": 2}}
+          }
+        },
+        {
+          "title": "Request Latency Heatmap (all endpoints)",
+          "type": "timeseries",
+          "gridPos": {"h": 7, "w": 12, "x": 12, "y": 18},
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.50, sum(rate(sarraf_http_request_duration_seconds_bucket[5m])) by (le))",
+              "legendFormat": "p50"
+            },
+            {
+              "expr": "histogram_quantile(0.90, sum(rate(sarraf_http_request_duration_seconds_bucket[5m])) by (le))",
+              "legendFormat": "p90"
+            },
+            {
+              "expr": "histogram_quantile(0.99, sum(rate(sarraf_http_request_duration_seconds_bucket[5m])) by (le))",
+              "legendFormat": "p99"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {"unit": "s", "custom": {"fillOpacity": 10, "lineWidth": 2}}
+          }
+        }
+      ],
+      "time": {"from": "now-1h", "to": "now"},
+      "refresh": "30s",
+      "schemaVersion": 39,
+      "templating": {"list": []}
+    }

@@ -6,3 +6,4 @@ resources:
   - grafana.yaml
   - grafana-route.yaml
   - dashboards/sarraf-dashboard.yaml
+  - dashboards/pods-dashboard.yaml
