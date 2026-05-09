@@ -67,16 +67,8 @@ data:
   datasources.yaml: |
     apiVersion: 1
     datasources:
-    - name: Google Managed Prometheus
+    - name: Prometheus
       type: prometheus
       access: proxy
-      url: http://frontend.default.svc:9090
+      url: http://prometheus-service.sarraf-dev.svc:9090
       isDefault: true
-    - name: Prometheus (GMP)
-      type: prometheus
-      access: proxy
-      url: https://monitoring.googleapis.com/v1/projects/omerops-sarraf-dev/location/global/prometheus
-      isDefault: false
-      jsonData:
-        httpMethod: POST
-        authenticationType: gce
