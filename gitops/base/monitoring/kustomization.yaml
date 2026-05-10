@@ -7,3 +7,5 @@ resources:
   - grafana-route.yaml
   - dashboards/sarraf-dashboard.yaml
   - dashboards/pods-dashboard.yaml
+  - dashboards/finops-dashboard.yaml
+  - dashboards/perpod-dashboard.yaml

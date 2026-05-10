@@ -43,6 +43,10 @@ spec:
           mountPath: /var/lib/grafana/dashboards/sarraf
         - name: pods-dashboard
           mountPath: /var/lib/grafana/dashboards/pods
+        - name: finops-dashboard
+          mountPath: /var/lib/grafana/dashboards/finops
+        - name: perpod-dashboard
+          mountPath: /var/lib/grafana/dashboards/perpod
       volumes:
       - name: grafana-datasources
         configMap:
@@ -56,6 +60,12 @@ spec:
       - name: pods-dashboard
         configMap:
           name: sarraf-pods-dashboard
+      - name: finops-dashboard
+        configMap:
+          name: sarraf-finops-dashboard
+      - name: perpod-dashboard
+        configMap:
+          name: sarraf-perpod-dashboard
 ---
 apiVersion: v1
 kind: Service

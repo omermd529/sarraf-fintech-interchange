@@ -1,0 +1,305 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sarraf-perpod-dashboard
+  namespace: sarraf-dev
+data:
+  sarraf-perpod.json: |
+    {
+      "title": "Sarraf - Per Pod Metrics",
+      "uid": "sarraf-perpod",
+      "version": 1,
+      "editable": true,
+      "panels": [
+        {
+          "title": "Frontend Pod — CPU Usage",
+          "type": "timeseries",
+          "gridPos": {"h": 7, "w": 12, "x": 0, "y": 0},
+          "targets": [
+            {
+              "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"sarraf-dev\", pod=~\"sarraf-frontend.*\", container!=\"POD\", container!=\"\"}[5m])) by (pod) * 100",
+              "legendFormat": "{{pod}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {"unit": "percent", "min": 0, "custom": {"fillOpacity": 20, "lineWidth": 2}}
+          }
+        },
+        {
+          "title": "Frontend Pod — Memory Usage",
+          "type": "timeseries",
+          "gridPos": {"h": 7, "w": 12, "x": 12, "y": 0},
+          "targets": [
+            {
+              "expr": "sum(container_memory_working_set_bytes{namespace=\"sarraf-dev\", pod=~\"sarraf-frontend.*\", container!=\"POD\", container!=\"\"}) by (pod)",
+              "legendFormat": "{{pod}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {"unit": "bytes", "min": 0, "custom": {"fillOpacity": 20, "lineWidth": 2}}
+          }
+        },
+        {
+          "title": "Backend Pod — CPU Usage",
+          "type": "timeseries",
+          "gridPos": {"h": 7, "w": 12, "x": 0, "y": 7},
+          "targets": [
+            {
+              "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"sarraf-dev\", pod=~\"sarraf-backend.*\", container!=\"POD\", container!=\"\"}[5m])) by (pod) * 100",
+              "legendFormat": "{{pod}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {"unit": "percent", "min": 0, "custom": {"fillOpacity": 20, "lineWidth": 2}}
+          }
+        },
+        {
+          "title": "Backend Pod — Memory Usage",
+          "type": "timeseries",
+          "gridPos": {"h": 7, "w": 12, "x": 12, "y": 7},
+          "targets": [
+            {
+              "expr": "sum(container_memory_working_set_bytes{namespace=\"sarraf-dev\", pod=~\"sarraf-backend.*\", container!=\"POD\", container!=\"\"}) by (pod)",
+              "legendFormat": "{{pod}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {"unit": "bytes", "min": 0, "custom": {"fillOpacity": 20, "lineWidth": 2}}
+          }
+        },
+        {
+          "title": "Frontend Pod — Network RX",
+          "type": "timeseries",
+          "gridPos": {"h": 7, "w": 12, "x": 0, "y": 14},
+          "targets": [
+            {
+              "expr": "sum(rate(container_network_receive_bytes_total{namespace=\"sarraf-dev\", pod=~\"sarraf-frontend.*\"}[5m])) by (pod)",
+              "legendFormat": "{{pod}} RX"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {"unit": "Bps", "custom": {"fillOpacity": 15, "lineWidth": 2}}
+          }
+        },
+        {
+          "title": "Frontend Pod — Network TX",
+          "type": "timeseries",
+          "gridPos": {"h": 7, "w": 12, "x": 12, "y": 14},
+          "targets": [
+            {
+              "expr": "sum(rate(container_network_transmit_bytes_total{namespace=\"sarraf-dev\", pod=~\"sarraf-frontend.*\"}[5m])) by (pod)",
+              "legendFormat": "{{pod}} TX"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {"unit": "Bps", "custom": {"fillOpacity": 15, "lineWidth": 2}}
+          }
+        },
+        {
+          "title": "Backend Pod — Network RX",
+          "type": "timeseries",
+          "gridPos": {"h": 7, "w": 12, "x": 0, "y": 21},
+          "targets": [
+            {
+              "expr": "sum(rate(container_network_receive_bytes_total{namespace=\"sarraf-dev\", pod=~\"sarraf-backend.*\"}[5m])) by (pod)",
+              "legendFormat": "{{pod}} RX"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {"unit": "Bps", "custom": {"fillOpacity": 15, "lineWidth": 2}}
+          }
+        },
+        {
+          "title": "Backend Pod — Network TX",
+          "type": "timeseries",
+          "gridPos": {"h": 7, "w": 12, "x": 12, "y": 21},
+          "targets": [
+            {
+              "expr": "sum(rate(container_network_transmit_bytes_total{namespace=\"sarraf-dev\", pod=~\"sarraf-backend.*\"}[5m])) by (pod)",
+              "legendFormat": "{{pod}} TX"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {"unit": "Bps", "custom": {"fillOpacity": 15, "lineWidth": 2}}
+          }
+        },
+        {
+          "title": "Grafana Pod — CPU Usage",
+          "type": "timeseries",
+          "gridPos": {"h": 7, "w": 12, "x": 0, "y": 28},
+          "targets": [
+            {
+              "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"sarraf-dev\", pod=~\"grafana.*\", container!=\"POD\", container!=\"\"}[5m])) by (pod) * 100",
+              "legendFormat": "{{pod}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {"unit": "percent", "min": 0, "custom": {"fillOpacity": 20, "lineWidth": 2}}
+          }
+        },
+        {
+          "title": "Grafana Pod — Memory Usage",
+          "type": "timeseries",
+          "gridPos": {"h": 7, "w": 12, "x": 12, "y": 28},
+          "targets": [
+            {
+              "expr": "sum(container_memory_working_set_bytes{namespace=\"sarraf-dev\", pod=~\"grafana.*\", container!=\"POD\", container!=\"\"}) by (pod)",
+              "legendFormat": "{{pod}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {"unit": "bytes", "min": 0, "custom": {"fillOpacity": 20, "lineWidth": 2}}
+          }
+        },
+        {
+          "title": "Grafana Pod — Network RX/TX",
+          "type": "timeseries",
+          "gridPos": {"h": 7, "w": 12, "x": 0, "y": 35},
+          "targets": [
+            {
+              "expr": "sum(rate(container_network_receive_bytes_total{namespace=\"sarraf-dev\", pod=~\"grafana.*\"}[5m])) by (pod)",
+              "legendFormat": "{{pod}} RX"
+            },
+            {
+              "expr": "sum(rate(container_network_transmit_bytes_total{namespace=\"sarraf-dev\", pod=~\"grafana.*\"}[5m])) by (pod)",
+              "legendFormat": "{{pod}} TX"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {"unit": "Bps", "custom": {"fillOpacity": 15, "lineWidth": 2}}
+          }
+        },
+        {
+          "title": "Grafana Pod — Ready",
+          "type": "stat",
+          "gridPos": {"h": 7, "w": 12, "x": 12, "y": 35},
+          "targets": [
+            {
+              "expr": "sum(kube_pod_container_status_ready{namespace=\"sarraf-dev\", pod=~\"grafana.*\"})",
+              "legendFormat": "Grafana Ready"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "thresholds": {"steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}
+            }
+          }
+        },
+        {
+          "title": "Prometheus Pod — CPU Usage",
+          "type": "timeseries",
+          "gridPos": {"h": 7, "w": 12, "x": 0, "y": 42},
+          "targets": [
+            {
+              "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"sarraf-dev\", pod=~\"prometheus.*\", container!=\"POD\", container!=\"\"}[5m])) by (pod) * 100",
+              "legendFormat": "{{pod}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {"unit": "percent", "min": 0, "custom": {"fillOpacity": 20, "lineWidth": 2}}
+          }
+        },
+        {
+          "title": "Prometheus Pod — Memory Usage",
+          "type": "timeseries",
+          "gridPos": {"h": 7, "w": 12, "x": 12, "y": 42},
+          "targets": [
+            {
+              "expr": "sum(container_memory_working_set_bytes{namespace=\"sarraf-dev\", pod=~\"prometheus.*\", container!=\"POD\", container!=\"\"}) by (pod)",
+              "legendFormat": "{{pod}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {"unit": "bytes", "min": 0, "custom": {"fillOpacity": 20, "lineWidth": 2}}
+          }
+        },
+        {
+          "title": "Prometheus Pod — Network RX/TX",
+          "type": "timeseries",
+          "gridPos": {"h": 7, "w": 12, "x": 0, "y": 49},
+          "targets": [
+            {
+              "expr": "sum(rate(container_network_receive_bytes_total{namespace=\"sarraf-dev\", pod=~\"prometheus.*\"}[5m])) by (pod)",
+              "legendFormat": "{{pod}} RX"
+            },
+            {
+              "expr": "sum(rate(container_network_transmit_bytes_total{namespace=\"sarraf-dev\", pod=~\"prometheus.*\"}[5m])) by (pod)",
+              "legendFormat": "{{pod}} TX"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {"unit": "Bps", "custom": {"fillOpacity": 15, "lineWidth": 2}}
+          }
+        },
+        {
+          "title": "Prometheus Pod — Ready",
+          "type": "stat",
+          "gridPos": {"h": 7, "w": 12, "x": 12, "y": 49},
+          "targets": [
+            {
+              "expr": "sum(kube_pod_container_status_ready{namespace=\"sarraf-dev\", pod=~\"prometheus.*\"})",
+              "legendFormat": "Prometheus Ready"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "thresholds": {"steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}
+            }
+          }
+        },
+        {
+          "title": "Pod Restarts — All Pods",
+          "type": "timeseries",
+          "gridPos": {"h": 6, "w": 12, "x": 0, "y": 56},
+          "targets": [
+            {
+              "expr": "sum(kube_pod_container_status_restarts_total{namespace=\"sarraf-dev\", pod=~\"sarraf-.*|grafana.*|prometheus.*\"}) by (pod)",
+              "legendFormat": "{{pod}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {"custom": {"fillOpacity": 10, "lineWidth": 2}}
+          }
+        },
+        {
+          "title": "Pod Status — Ready Containers",
+          "type": "stat",
+          "gridPos": {"h": 6, "w": 6, "x": 12, "y": 56},
+          "targets": [
+            {
+              "expr": "sum(kube_pod_container_status_ready{namespace=\"sarraf-dev\", pod=~\"sarraf-frontend.*\"})",
+              "legendFormat": "Frontend Ready"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "thresholds": {"steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}
+            }
+          }
+        },
+        {
+          "title": "Pod Status — Backend Ready",
+          "type": "stat",
+          "gridPos": {"h": 6, "w": 6, "x": 18, "y": 56},
+          "targets": [
+            {
+              "expr": "sum(kube_pod_container_status_ready{namespace=\"sarraf-dev\", pod=~\"sarraf-backend.*\"})",
+              "legendFormat": "Backend Ready"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "thresholds": {"steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}
+            }
+          }
+        }
+      ],
+      "time": {"from": "now-1h", "to": "now"},
+      "refresh": "30s",
+      "schemaVersion": 39,
+      "templating": {"list": []}
+    }

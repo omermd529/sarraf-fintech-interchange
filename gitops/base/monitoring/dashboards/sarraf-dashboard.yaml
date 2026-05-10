@@ -23,6 +23,22 @@ data:
       editable: true
       options:
         path: /var/lib/grafana/dashboards/pods
+    - name: 'sarraf-finops'
+      orgId: 1
+      folder: 'Sarraf'
+      type: file
+      disableDeletion: false
+      editable: true
+      options:
+        path: /var/lib/grafana/dashboards/finops
+    - name: 'sarraf-perpod'
+      orgId: 1
+      folder: 'Sarraf'
+      type: file
+      disableDeletion: false
+      editable: true
+      options:
+        path: /var/lib/grafana/dashboards/perpod
 ---
 apiVersion: v1
 kind: ConfigMap

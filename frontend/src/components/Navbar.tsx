@@ -18,6 +18,7 @@ export default function Navbar() {
           <Link href="/" className="hover:text-emerald-500 transition-colors">Dashboard</Link>
           <Link href="/pay" className="hover:text-emerald-500 transition-colors">Pay</Link>
           <Link href="/history" className="hover:text-emerald-500 transition-colors">History</Link>
+          <Link href="/about" className="hover:text-emerald-500 transition-colors">About</Link>
         </div>
       </div>
 

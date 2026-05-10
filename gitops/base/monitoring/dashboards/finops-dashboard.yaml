@@ -1,0 +1,187 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sarraf-finops-dashboard
+  namespace: sarraf-dev
+data:
+  sarraf-finops.json: |
+    {
+      "title": "Sarraf - FinOps Cost Estimation",
+      "uid": "sarraf-finops",
+      "version": 1,
+      "editable": true,
+      "panels": [
+        {
+          "title": "GKE Cluster Cost (Daily Estimate)",
+          "description": "Estimated daily cost based on node CPU-hours. Assumes $0.035/vCPU-hour for e2-medium Spot.",
+          "type": "stat",
+          "gridPos": {"h": 6, "w": 8, "x": 0, "y": 0},
+          "targets": [
+            {
+              "expr": "sum(kube_node_status_capacity{resource=\"cpu\"}) * 0.035 * 24",
+              "legendFormat": "Daily Cost ($)"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "currencyUSD",
+              "color": {"mode": "thresholds"},
+              "thresholds": {
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 5},
+                  {"color": "red", "value": 15}
+                ]
+              }
+            }
+          }
+        },
+        {
+          "title": "Savings from Spot Instances",
+          "description": "Estimated savings vs on-demand pricing ($0.067/vCPU-hour). Shows % saved by using Spot.",
+          "type": "gauge",
+          "gridPos": {"h": 6, "w": 8, "x": 8, "y": 0},
+          "targets": [
+            {
+              "expr": "((0.067 - 0.035) / 0.067) * 100",
+              "legendFormat": "Spot Savings %"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "max": 100,
+              "thresholds": {
+                "steps": [
+                  {"color": "red", "value": null},
+                  {"color": "yellow", "value": 30},
+                  {"color": "green", "value": 40}
+                ]
+              }
+            }
+          }
+        },
+        {
+          "title": "Cost per Transaction (Halalas)",
+          "description": "Infrastructure cost per transaction = (daily cluster cost / daily transactions) * 100 halalas.",
+          "type": "stat",
+          "gridPos": {"h": 6, "w": 8, "x": 16, "y": 0},
+          "targets": [
+            {
+              "expr": "(sum(kube_node_status_capacity{resource=\"cpu\"}) * 0.035 * 24 * 3.75 * 100) / clamp_min(sum(increase(sarraf_transactions_total[24h])), 1)",
+              "legendFormat": "Halalas/Tx"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "none",
+              "decimals": 2,
+              "color": {"mode": "thresholds"},
+              "thresholds": {
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 50},
+                  {"color": "red", "value": 100}
+                ]
+              }
+            }
+          }
+        },
+        {
+          "title": "Daily Cluster Cost Trend",
+          "type": "timeseries",
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 6},
+          "targets": [
+            {
+              "expr": "sum(kube_node_status_capacity{resource=\"cpu\"}) * 0.035 * 24",
+              "legendFormat": "Spot Cost ($)"
+            },
+            {
+              "expr": "sum(kube_node_status_capacity{resource=\"cpu\"}) * 0.067 * 24",
+              "legendFormat": "On-Demand Cost ($)"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "currencyUSD",
+              "custom": {"fillOpacity": 15, "lineWidth": 2}
+            }
+          }
+        },
+        {
+          "title": "Transactions per Hour",
+          "type": "timeseries",
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 6},
+          "targets": [
+            {
+              "expr": "sum(increase(sarraf_transactions_total[1h]))",
+              "legendFormat": "Transactions/hr"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": {"fillOpacity": 20, "lineWidth": 2}
+            }
+          }
+        },
+        {
+          "title": "Monthly Projected Cost (USD)",
+          "type": "stat",
+          "gridPos": {"h": 5, "w": 8, "x": 0, "y": 14},
+          "targets": [
+            {
+              "expr": "sum(kube_node_status_capacity{resource=\"cpu\"}) * 0.035 * 24 * 30",
+              "legendFormat": "Monthly ($)"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "currencyUSD",
+              "color": {"mode": "thresholds"},
+              "thresholds": {"steps": [{"color": "blue", "value": null}]}
+            }
+          }
+        },
+        {
+          "title": "Monthly Projected Cost (SAR)",
+          "type": "stat",
+          "gridPos": {"h": 5, "w": 8, "x": 8, "y": 14},
+          "targets": [
+            {
+              "expr": "sum(kube_node_status_capacity{resource=\"cpu\"}) * 0.035 * 24 * 30 * 3.75",
+              "legendFormat": "Monthly (SAR)"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "currencySAR",
+              "color": {"mode": "thresholds"},
+              "thresholds": {"steps": [{"color": "green", "value": null}]}
+            }
+          }
+        },
+        {
+          "title": "Monthly Spot Savings (USD)",
+          "type": "stat",
+          "gridPos": {"h": 5, "w": 8, "x": 16, "y": 14},
+          "targets": [
+            {
+              "expr": "sum(kube_node_status_capacity{resource=\"cpu\"}) * (0.067 - 0.035) * 24 * 30",
+              "legendFormat": "Saved ($)"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "currencyUSD",
+              "color": {"mode": "thresholds"},
+              "thresholds": {"steps": [{"color": "green", "value": null}]}
+            }
+          }
+        }
+      ],
+      "time": {"from": "now-24h", "to": "now"},
+      "refresh": "5m",
+      "schemaVersion": 39,
+      "templating": {"list": []}
+    }

@@ -80,6 +80,7 @@ This project is engineered to meet the stringent requirements of the **Saudi Ara
 ├── .github/
 │   └── workflows/              # DevSecOps CI/CD Pipelines
 │       ├── backend-dev.yml
+│       ├── frontend-dev.yml
 │       ├── terraform-dev.yml
 │       ├── terraform-prod.yml
 │       └── test-wif.yml
@@ -98,6 +99,31 @@ This project is engineered to meet the stringent requirements of the **Saudi Ara
 │   ├── go.mod
 │   ├── go.sum
 │   └── main.go                 # Golang Microservice
+├── frontend/
+│   ├── k8s/                    # Frontend K8s Manifests
+│   │   ├── deployment.yaml
+│   │   ├── ingress.yaml
+│   │   ├── managed-cert.yaml
+│   │   └── service.yaml
+│   ├── src/app/                # Next.js Pages
+│   │   ├── about/page.tsx      # About Sarraf & Engineer
+│   │   ├── history/page.tsx    # Transaction Audit Trail
+│   │   ├── pay/page.tsx        # Payment Interface
+│   │   └── page.tsx            # Dashboard
+│   ├── Dockerfile              # Multi-stage Next.js Build
+│   └── package.json
+├── gitops/
+│   ├── argocd/                 # ArgoCD Application Configs
+│   ├── base/
+│   │   └── monitoring/         # Observability Stack
+│   │       ├── dashboards/
+│   │       │   ├── sarraf-dashboard.yaml   # Interchange Overview
+│   │       │   ├── pods-dashboard.yaml     # Backend Pod Health
+│   │       │   ├── finops-dashboard.yaml   # FinOps Cost Estimation
+│   │       │   └── perpod-dashboard.yaml   # Per-Pod Metrics (All Pods)
+│   │       ├── grafana.yaml
+│   │       └── prometheus.yaml
+│   └── overlays/               # Kustomize Overlays
 ├── terraform/
 │   ├── environments/           # Environment-specific Configs
 │   │   ├── dev/
@@ -138,12 +164,28 @@ This project is engineered to meet the stringent requirements of the **Saudi Ara
 | Layer | Technology |
 | :--- | :--- |
 | **Runtime** | Golang (1.22) |
+| **Frontend** | Next.js (React) with Shadcn UI |
 | **Cloud** | Google Cloud Platform (GCP) |
 | **Compute** | GKE Autopilot (Spot Instances for Dev, Standard for Prod) |
 | **Database** | Cloud SQL (PostgreSQL) with versioned SQL migrations |
 | **IaC** | Terraform |
+| **Observability** | Prometheus + Grafana (FinOps, Per-Pod, Interchange dashboards) |
+| **GitOps** | ArgoCD + Kustomize |
 | **Security** | Trivy, WIF, Distroless, Cloud IAM |
 | **CI/CD** | GitHub Actions |
+
+---
+
+## 📊 Grafana Dashboards
+
+Four provisioned dashboards available at `grafana.omerops.com`:
+
+| Dashboard | Panels |
+| :--- | :--- |
+| **Interchange Overview** | Transactions (success/failed), Payment Latency (p50/p95/p99), Fees Collected, HTTP Requests by Endpoint, Go Runtime |
+| **Pod Health & Performance** | Backend CPU, Memory, Goroutines, GC Pauses, File Descriptors, Error Rate, Request Latency |
+| **FinOps Cost Estimation** | GKE Cluster Cost (Daily), Savings from Spot Instances (%), Cost per Transaction (Halalas), Monthly Projections (USD/SAR) |
+| **Per-Pod Metrics** | CPU, Memory, Network RX/TX, Restarts, Ready Status — for Frontend, Backend, Grafana, and Prometheus pods |
 
 ---
 
@@ -155,4 +197,4 @@ This project is engineered to meet the stringent requirements of the **Saudi Ara
 
 ---
 
-*Project Status: Active Development (Phase: Backend Containerization & CI/CD Pipeline Integration)*
+*Project Status: Active Development (Phase: Observability & FinOps Dashboard Integration)*
