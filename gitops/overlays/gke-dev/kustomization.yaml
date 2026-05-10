@@ -36,7 +36,7 @@ patches:
 images:
   - name: sarraf-api
     newName: me-central1-docker.pkg.dev/omerops-sarraf-dev/sarraf-docker-repo/sarraf-api
-    newTag: "655c33c376a7987fe1b51d5a7c97ba0bd874ec69"
+    newTag: "90b02d12d6cf1d19896cd7184e035632f00ed3dd"
   - name: sarraf-frontend
     newName: me-central1-docker.pkg.dev/omerops-sarraf-dev/sarraf-docker-repo/sarraf-frontend
     newTag: "99762f239786e6a5593853092b5b42c2e1bff4c3"
