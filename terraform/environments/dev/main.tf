@@ -34,8 +34,10 @@ module "database" {
 }
 
 module "iam" {
-  source     = "../../modules/iam"
-  project_id = var.project_id
+  source        = "../../modules/iam"
+  project_id    = var.project_id
+  env           = "dev"
+  k8s_namespace = "sarraf-dev"
 }
 
 # Static Global IP for GKE Ingress

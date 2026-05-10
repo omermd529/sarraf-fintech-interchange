@@ -1,0 +1,107 @@
+name: Backend Prod CI
+
+on:
+    push:
+        branches: [main]
+        paths:
+            - 'backend/**'
+            - '.github/workflows/backend-prod.yml'
+            - '!gitops/**'
+
+env:
+    PROJECT_ID: omerops-sarraf-prod
+    REGION: me-central1
+    REPO_NAME: sarraf-docker-repo
+    IMAGE_NAME: sarraf-api
+    CLUSTER_NAME: sarraf-cluster-prod
+
+jobs:
+    build-scan-push:
+        name: Build, Scan, and Push Image (Prod)
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
+            id-token: write
+
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Authenticate to Google Cloud
+              id: auth
+              uses: google-github-actions/auth@v2
+              with:
+                  workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_PROD }}
+                  service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_PROD }}
+
+            - name: Setup Cloud SDK
+              uses: google-github-actions/setup-gcloud@v2
+
+            - name: Setup Terraform
+              uses: hashicorp/setup-terraform@v3
+              with:
+                terraform_wrapper: false
+
+            - name: Configure Docker for artifact registry
+              run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+            - name: Build Docker Image
+              run: docker build -t sarraf-api:${{ github.sha }} ./backend
+
+            - name: Run Trivy vulnerability scanner
+              uses: aquasecurity/trivy-action@master
+              with:
+                  image-ref: 'sarraf-api:${{ github.sha }}'
+                  format: 'table'
+                  exit-code: '1'
+                  ignore-unfixed: true
+                  vuln-type: 'os,library'
+                  severity: 'CRITICAL,HIGH'
+
+            - name: Check and Push Docker Image
+              run: |
+                  REMOTE_TAG="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
+                  if gcloud artifacts docker images describe "$REMOTE_TAG" > /dev/null 2>&1; then
+                    echo "Tag ${{ github.sha }} already exists. Skipping push."
+                  else
+                    docker tag sarraf-api:${{ github.sha }} "$REMOTE_TAG"
+                    docker push "$REMOTE_TAG"
+                  fi
+
+            # Connect Gateway for private cluster access (no 0.0.0.0/0)
+            - name: Get GKE Credentials via Connect Gateway
+              uses: google-github-actions/get-gke-credentials@v2
+              with:
+                  cluster_name: ${{ env.CLUSTER_NAME }}
+                  location: ${{ env.REGION }}
+                  use_connect_gateway: true
+
+            - name: Run Database Migrations
+              run: |
+                NAMESPACE="sarraf-prod"
+                cd terraform/environments/prod
+                terraform init
+                DB_PRIVATE_IP=$(terraform output -raw database_ip)
+                cd $GITHUB_WORKSPACE
+                kubectl create configmap sarraf-migrations-cm \
+                  --from-file=backend/migrations/ \
+                  -n $NAMESPACE \
+                  --dry-run=client -o yaml | kubectl apply -f -
+                sed -i "s|10.20.0.3|$DB_PRIVATE_IP|g" backend/k8s/migration-job.yaml
+                kubectl delete job sarraf-db-migrate -n $NAMESPACE --ignore-not-found=true
+                kubectl apply -f backend/k8s/migration-job.yaml
+                kubectl wait --for=condition=complete job/sarraf-db-migrate -n $NAMESPACE --timeout=180s
+
+            # GitOps: Update image tag → ArgoCD auto-syncs
+            - name: Update GitOps image tag
+              run: |
+                cd gitops/overlays/gke-prod
+                sed -i '/name: sarraf-api/{n;n;s|newTag:.*|newTag: "'"${{ github.sha }}"'"|}' kustomization.yaml
+
+            - name: Commit and Push GitOps update
+              run: |
+                git config user.name "github-actions[bot]"
+                git config user.email "github-actions[bot]@users.noreply.github.com"
+                git add gitops/overlays/gke-prod/kustomization.yaml
+                git diff --cached --quiet || git commit -m "ci(prod): update sarraf-api image to ${{ github.sha }}"
+                git push

@@ -1,6 +1,6 @@
 resource "google_service_account" "sarraf_backend" {
   account_id   = "sarraf-backend-gsa"
-  display_name = "GSA for Sarraf Backend Microservice"
+  display_name = "GSA for Sarraf Backend Pods (${var.env})"
   project      = var.project_id
 }
 
@@ -25,11 +25,11 @@ resource "google_project_iam_member" "gsa_cloudsql_instance_user" {
 resource "google_service_account_iam_member" "workload_identity_binding" {
   service_account_id = google_service_account.sarraf_backend.name
   role               = "roles/iam.workloadIdentityUser"
-  member             = "serviceAccount:${var.project_id}.svc.id.goog[sarraf-dev/sarraf-backend-ksa]"
+  member             = "serviceAccount:${var.project_id}.svc.id.goog[${var.k8s_namespace}/sarraf-backend-ksa]"
 }
 
 resource "google_project_iam_member" "iap_tunnel_user" {
   project = var.project_id
   role    = "roles/iap.tunnelResourceAccessor"
-  member  = "user:omerops13@gmail.com"
+  member  = "user:${var.iap_user_email}"
 }

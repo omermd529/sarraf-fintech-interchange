@@ -1,0 +1,81 @@
+name: Frontend Prod CI
+
+on:
+    push:
+        branches: [main]
+        paths:
+            - 'frontend/**'
+            - '.github/workflows/frontend-prod.yml'
+            - '!gitops/**'
+
+env:
+    PROJECT_ID: omerops-sarraf-prod
+    REGION: me-central1
+    REPO_NAME: sarraf-docker-repo
+    IMAGE_NAME: sarraf-frontend
+
+jobs:
+    build-scan-push:
+        name: Build, Scan, and Push Image (Prod)
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
+            id-token: write
+
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Authenticate to Google Cloud
+              id: auth
+              uses: google-github-actions/auth@v2
+              with:
+                  workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_PROD }}
+                  service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_PROD }}
+
+            - name: Setup Cloud SDK
+              uses: google-github-actions/setup-gcloud@v2
+
+            - name: Configure Docker for artifact registry
+              run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+            - name: Build Docker Image
+              run: |
+                  docker build \
+                    --build-arg NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_URL_PROD }} \
+                    --build-arg NEXT_PUBLIC_USER_ID=${{ secrets.NEXT_PUBLIC_USER_ID_PROD }} \
+                    -t sarraf-frontend:${{ github.sha }} ./frontend
+
+            - name: Run Trivy vulnerability scanner
+              uses: aquasecurity/trivy-action@master
+              with:
+                  image-ref: 'sarraf-frontend:${{ github.sha }}'
+                  format: 'table'
+                  exit-code: '1'
+                  ignore-unfixed: true
+                  vuln-type: 'os,library'
+                  severity: 'CRITICAL,HIGH'
+
+            - name: Check and Push Docker Image
+              run: |
+                  REMOTE_TAG="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
+                  if gcloud artifacts docker images describe "$REMOTE_TAG" > /dev/null 2>&1; then
+                    echo "Tag ${{ github.sha }} already exists. Skipping push."
+                  else
+                    docker tag sarraf-frontend:${{ github.sha }} "$REMOTE_TAG"
+                    docker push "$REMOTE_TAG"
+                  fi
+
+            # GitOps: Update image tag → ArgoCD auto-syncs
+            - name: Update GitOps image tag
+              run: |
+                cd gitops/overlays/gke-prod
+                sed -i '/name: sarraf-frontend/{n;n;s|newTag:.*|newTag: "'"${{ github.sha }}"'"|}' kustomization.yaml
+
+            - name: Commit and Push GitOps update
+              run: |
+                git config user.name "github-actions[bot]"
+                git config user.email "github-actions[bot]@users.noreply.github.com"
+                git add gitops/overlays/gke-prod/kustomization.yaml
+                git diff --cached --quiet || git commit -m "ci(prod): update sarraf-frontend image to ${{ github.sha }}"
+                git push

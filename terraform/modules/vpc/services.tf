@@ -1,10 +1,14 @@
 # List of APIs required for a FinTech GKE Stack
 locals {
   services = [
-    "compute.googleapis.com",   # For VPCs and VMs
-    "container.googleapis.com", # For GKE
-    "sqladmin.googleapis.com",  # For Cloud SQL (Sarraf Database)
-    "iam.googleapis.com",       # For Service Accounts
+    "compute.googleapis.com",
+    "container.googleapis.com",
+    "sqladmin.googleapis.com",
+    "iam.googleapis.com",
+    "certificatemanager.googleapis.com",
+    "secretmanager.googleapis.com",
+    "servicenetworking.googleapis.com",
+    "artifactregistry.googleapis.com",
   ]
 }
 
