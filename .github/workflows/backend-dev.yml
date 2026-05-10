@@ -91,6 +91,7 @@ jobs:
                   -n $NAMESPACE \
                   --dry-run=client -o yaml | kubectl apply -f -
                 sed -i "s|10.20.0.3|$DB_PRIVATE_IP|g" backend/k8s/migration-job.yaml
+                sed -i "s|NAMESPACE_PLACEHOLDER|$NAMESPACE|g" backend/k8s/migration-job.yaml
                 kubectl delete job sarraf-db-migrate -n $NAMESPACE --ignore-not-found=true
                 kubectl apply -f backend/k8s/migration-job.yaml
                 kubectl wait --for=condition=complete job/sarraf-db-migrate -n $NAMESPACE --timeout=180s

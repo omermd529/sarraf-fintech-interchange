@@ -2,7 +2,7 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: sarraf-db-migrate
-  namespace: sarraf-dev
+  namespace: NAMESPACE_PLACEHOLDER
 spec:
   template:
     spec:
