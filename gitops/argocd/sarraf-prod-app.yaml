@@ -7,7 +7,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/omermd529/sarraf-fintech-interchange.git
-    targetRevision: main
+    targetRevision: production
     path: gitops/overlays/gke-prod
   destination:
     server: https://kubernetes.default.svc

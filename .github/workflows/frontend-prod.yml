@@ -2,7 +2,7 @@ name: Frontend Prod CI
 
 on:
     push:
-        branches: [main]
+        branches: [production]
         paths:
             - 'frontend/**'
             - '.github/workflows/frontend-prod.yml'

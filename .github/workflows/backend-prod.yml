@@ -2,7 +2,7 @@ name: Backend Prod CI
 
 on:
     push:
-        branches: [main]
+        branches: [production]
         paths:
             - 'backend/**'
             - '.github/workflows/backend-prod.yml'
