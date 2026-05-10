@@ -39,4 +39,4 @@ images:
     newTag: "655c33c376a7987fe1b51d5a7c97ba0bd874ec69"
   - name: sarraf-frontend
     newName: me-central1-docker.pkg.dev/omerops-sarraf-dev/sarraf-docker-repo/sarraf-frontend
-    newTag: "dca86190b779448851743311084d67e557110150"
+    newTag: "99762f239786e6a5593853092b5b42c2e1bff4c3"
