@@ -4,7 +4,6 @@ resources:
   - pod-monitoring.yaml
   - prometheus.yaml
   - grafana.yaml
-  - grafana-route.yaml
   - dashboards/sarraf-dashboard.yaml
   - dashboards/pods-dashboard.yaml
   - dashboards/finops-dashboard.yaml

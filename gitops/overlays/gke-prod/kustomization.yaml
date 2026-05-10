@@ -8,6 +8,7 @@ resources:
   - ../../base/frontend
   - ../../base/monitoring
   - namespace.yaml
+  - networking.yaml
 
 patches:
   # Backend: GKE-specific service account annotation

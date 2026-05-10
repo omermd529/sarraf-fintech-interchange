@@ -13,5 +13,5 @@ variable "subnet_cidr" {
 variable "cert_domains" {
   type        = list(string)
   description = "Domains for the Google-managed SSL certificate"
-  default     = ["sarraf.omerops.com", "api.omerops.com", "omerops.com", "grafana.omerops.com"]
+  default     = ["dev.sarraf.omerops.com", "dev-api.omerops.com", "dev-grafana.omerops.com"]
 }

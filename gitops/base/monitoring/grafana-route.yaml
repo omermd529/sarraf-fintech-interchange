@@ -8,7 +8,7 @@ spec:
   - name: sarraf-gateway
     sectionName: https
   hostnames:
-  - grafana.omerops.com
+  - dev-grafana.omerops.com
   rules:
   - backendRefs:
     - name: grafana-service
