@@ -9,6 +9,8 @@ locals {
     "secretmanager.googleapis.com",
     "servicenetworking.googleapis.com",
     "artifactregistry.googleapis.com",
+    "gkehub.googleapis.com",
+    "connectgateway.googleapis.com",
   ]
 }
 
