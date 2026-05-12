@@ -1,0 +1,2 @@
+DELETE FROM users WHERE user_id = '00000000-0000-0000-0000-000000000000';
+DELETE FROM merchants WHERE business_name = 'Blue Nile Coffee';
